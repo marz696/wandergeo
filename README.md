@@ -24,6 +24,18 @@ Butuh Edge Function `login` yang mengembalikan `{ "token": "..." }`.
 `lib/core/widgets/wandergeo_logo.dart` berisi `WanderGeoLogo` (bisa `animate: true`) dan `WanderGeoWordmark`,
 masing-masing punya varian `.onDark`. Belum dipakai di halaman login (mockup tidak menampilkannya di sana).
 
+## Login (Supabase)
+Login dan daftar memakai Edge Function `auth` (`supabase/functions/auth/index.ts`): password di-hash bcrypt,
+sesi berupa token acak yang di server hanya disimpan sebagai hash SHA-256. Langkah menyiapkannya ada di
+`supabase/PETUNJUK_SUPABASE.md`. Tanpa kunci Supabase, aplikasi berjalan dalam mode mock (login simulasi).
+Jalankan dengan kunci: salin `dart_defines.example.json` menjadi `dart_defines.json`, isi, lalu
+`flutter run --dart-define-from-file=dart_defines.json`. Tambahkan `dart_defines.json` ke `.gitignore`.
+
+## Alat Perjalanan
+`features/tools/`: konversi mata uang (12 mata uang, kurs Frankfurter v2 lewat `core/services/currency_service.dart`,
+disimpan di SQLite `core/database/app_database.dart` agar jalan offline) dan konversi waktu WIB/WITA/WIT/London
+(London otomatis BST/GMT, tanpa API). Konversi antar mata uang dihitung silang lewat USD.
+
 ## Eksplorasi
 `lib/features/explore/`: peta penuh layar (`flutter_map` + tile OpenStreetMap, tanpa API key/billing),
 header (judul, Alat Perjalanan, Tanya Pemandu, koin), pencarian, filter status, urut, pengalih ASEAN/UK,
@@ -33,7 +45,7 @@ pin negara (selesai/terbuka/terkunci), carousel negara, dan panel detail.
 - API: Wikipedia REST (ringkasan + foto, `wikipedia_service.dart`) dan Open-Meteo (cuaca, `weather_service.dart`). Keduanya gratis tanpa key.
 - Rekomendasi AI (non-LLM): `features/explore/logic/recommender.dart`.
 - Data awal: `features/explore/data/country_seed.dart` (12 negara, status contoh). Ganti dengan SQLite + Supabase nanti.
-- Tombol Alat Perjalanan, Tanya Pemandu, dan Mulai Misi masih menampilkan snackbar "segera hadir".
+- Tombol Alat Perjalanan membuka `features/tools/alat_perjalanan_page.dart`. Tanya Pemandu dan Mulai Misi masih snackbar "segera hadir".
 - Atribusi "© OpenStreetMap contributors" wajib tetap tampil; tile publik OSM hanya untuk pemakaian ringan.
 
-Setelah menimpa file, jalankan lagi `flutter pub get` dan `dart run tool/setup_platform.dart` (izin lokasi + internet).
+Setelah menimpa file, jalankan lagi `flutter pub get` dan `dart run tool/setup_platform.dart` (izin lokasi + internet); database SQLite dibuat otomatis saat pertama dipakai.

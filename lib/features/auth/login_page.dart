@@ -9,6 +9,7 @@ import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../routes.dart';
 import 'login_controller.dart';
+import 'register_page.dart';
 import 'widgets/hero_illustration.dart';
 import 'widgets/login_overlays.dart';
 
@@ -31,7 +32,6 @@ class _LoginPageState extends State<LoginPage>
   final _form = GlobalKey<FormState>();
   final _idCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
-  bool _done = false;
 
   /// true di layar pendek / saat keyboard terbuka: jarak antar elemen dirapatkan.
   bool _compact = false;
@@ -94,7 +94,7 @@ class _LoginPageState extends State<LoginPage>
     final ok = await ctrl.login(_idCtrl.text.trim(), _pwCtrl.text);
     if (!mounted) return;
     if (ok) {
-      setState(() => _done = true);
+      _goHome();
     } else {
       _snack(ctrl.errorMessage ?? 'Login gagal');
     }
@@ -106,7 +106,7 @@ class _LoginPageState extends State<LoginPage>
     if (!mounted) return;
     switch (result) {
       case BiometricResult.success:
-        setState(() => _done = true);
+        _goHome();
       case BiometricResult.notAvailable:
         _snack('Biometrik tidak tersedia di perangkat ini');
       case BiometricResult.noSession:
@@ -211,9 +211,6 @@ class _LoginPageState extends State<LoginPage>
                 kind: ctrl.biometricKind,
                 onCancel: ctrl.cancelBiometric,
               ),
-            ),
-            Positioned.fill(
-              child: SuccessOverlay(visible: _done, onContinue: _goHome),
             ),
           ],
         ),
@@ -382,7 +379,7 @@ class _LoginPageState extends State<LoginPage>
                 style: TextStyle(fontSize: 14, color: AppColors.muted),
               ),
               InkWell(
-                onTap: () => _snack('Halaman daftar menyusul', error: false),
+                onTap: busy ? null : () => Navigator.of(context).push(RegisterPage.route()),
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 4),
                   child: Text(

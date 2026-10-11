@@ -1,17 +1,16 @@
 /// Konfigurasi aplikasi.
 ///
-/// Mode mock = true  -> login berjalan tanpa backend (untuk demo UI).
-/// Mode mock = false -> memakai Supabase Edge Function `login`.
+/// Tanpa kunci Supabase -> mode mock (login simulasi, untuk demo UI).
+/// Dengan kunci -> memakai Edge Function `auth` di Supabase.
 ///
-/// Jalankan dengan kunci Supabase tanpa menyimpannya di kode:
-///   flutter run --dart-define=SUPABASE_URL=https://xxx.supabase.co \
-///               --dart-define=SUPABASE_ANON_KEY=xxxxx
+/// Salin dart_defines.example.json menjadi dart_defines.json, isi nilainya, lalu:
+///   flutter run --dart-define-from-file=dart_defines.json
 class AppConfig {
   AppConfig._();
-
-  static const bool useMock = true;
 
   static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const String supabaseAnonKey =
       String.fromEnvironment('SUPABASE_ANON_KEY');
+
+  static const bool useMock = supabaseUrl == '' || supabaseAnonKey == '';
 }

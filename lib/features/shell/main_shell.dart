@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
-import '../../core/services/secure_storage_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../routes.dart';
+import '../auth/auth_repository.dart';
 import '../explore/explore_page.dart';
 import 'floating_nav_bar.dart';
 import 'tab_placeholder_page.dart';
@@ -83,6 +84,7 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _confirmLogout() async {
     HapticFeedback.mediumImpact();
+    final repo = context.read<AuthRepository>();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -108,7 +110,7 @@ class _MainShellState extends State<MainShell> {
       ),
     );
     if (ok != true) return;
-    await SecureStorageService().clear();
+    await repo.logout();
     if (!mounted) return;
     Navigator.of(context)
         .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);

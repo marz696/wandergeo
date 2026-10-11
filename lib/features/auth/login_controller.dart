@@ -71,7 +71,7 @@ class LoginController extends ChangeNotifier {
       final ok = await _bio.authenticate();
       if (_cancelled) return BiometricResult.cancelled;
       if (!ok) return BiometricResult.failed;
-      if (!AppConfig.useMock && !await _repo.hasSavedSession()) {
+      if (!AppConfig.useMock && !await _repo.restoreSession()) {
         return BiometricResult.noSession;
       }
       return BiometricResult.success;

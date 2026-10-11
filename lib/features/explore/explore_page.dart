@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/geo_utils.dart';
 import '../../core/widgets/round_icon_button.dart';
 import 'data/country_seed.dart';
+import '../tools/alat_perjalanan_page.dart';
 import 'logic/recommender.dart';
 import 'models/country.dart';
 import 'widgets/country_card.dart';
@@ -223,6 +224,11 @@ class _ExplorePageState extends State<ExplorePage>
       ));
   }
 
+  void _openTools({String? currency}) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(AlatPerjalananPage.route(currency: currency));
+  }
+
   void _rebuildPages(int initial) {
     final old = _pages;
     _pages = PageController(viewportFraction: .82, initialPage: initial);
@@ -383,7 +389,7 @@ class _ExplorePageState extends State<ExplorePage>
         distanceKm: _distance(selected),
         approximate: _user?.approximate ?? true,
         onStart: () => _soon('Misi ${selected.name}'),
-        onTools: () => _soon('Alat Perjalanan'),
+        onTools: () => _openTools(currency: selected.currency),
         onClose: _closeSheet,
       );
     } else if (items.isEmpty) {
@@ -614,7 +620,7 @@ class _ExplorePageState extends State<ExplorePage>
         RoundIconButton(
           icon: Icons.currency_exchange_rounded,
           label: 'Alat Perjalanan',
-          onTap: () => _soon('Alat Perjalanan'),
+          onTap: _openTools,
         ),
         const SizedBox(width: 8),
         RoundIconButton(
