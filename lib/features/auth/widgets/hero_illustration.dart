@@ -8,10 +8,21 @@ import '../../../core/utils/paint_utils.dart';
 /// Ilustrasi petualang di bagian atas halaman login.
 /// [enter] (0..1) mengatur animasi masuk: gunung naik bergantian.
 /// Pesawat dan awan bergerak terus (loop internal).
+///
+/// [scale] = skala gambar (1 = lebar desain 390). Bila lebih kecil dari
+/// lebar layar / 390, sisi kiri-kanan diisi perpanjangan gunung, dan jalur
+/// pesawat diturunkan agar tidak tertutup status bar ([topInset]).
 class HeroIllustration extends StatefulWidget {
-  const HeroIllustration({super.key, required this.enter});
+  const HeroIllustration({
+    super.key,
+    required this.enter,
+    required this.scale,
+    this.topInset = 0,
+  });
 
   final Animation<double> enter;
+  final double scale;
+  final double topInset;
 
   @override
   State<HeroIllustration> createState() => _HeroIllustrationState();
@@ -38,9 +49,14 @@ class _HeroIllustrationState extends State<HeroIllustration>
       child: LayoutBuilder(
         builder: (_, c) => SizedBox(
           width: c.maxWidth,
-          height: c.maxWidth * 400 / 390,
+          height: 400 * widget.scale,
           child: CustomPaint(
-            painter: _HeroPainter(enter: widget.enter, loop: _loop),
+            painter: _HeroPainter(
+              enter: widget.enter,
+              loop: _loop,
+              scale: widget.scale,
+              topInset: widget.topInset,
+            ),
           ),
         ),
       ),
@@ -49,11 +65,17 @@ class _HeroIllustrationState extends State<HeroIllustration>
 }
 
 class _HeroPainter extends CustomPainter {
-  _HeroPainter({required this.enter, required this.loop})
-      : super(repaint: Listenable.merge([enter, loop]));
+  _HeroPainter({
+    required this.enter,
+    required this.loop,
+    required this.scale,
+    required this.topInset,
+  }) : super(repaint: Listenable.merge([enter, loop]));
 
   final Animation<double> enter;
   final Animation<double> loop;
+  final double scale;
+  final double topInset;
 
   double _p(double a, double b) =>
       Interval(a, b, curve: Curves.easeOutCubic).transform(enter.value);
@@ -77,7 +99,10 @@ class _HeroPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.scale(size.width / 390);
+    canvas.scale(scale);
+    // Kelebihan lebar (satuan desain) di tiap sisi bila skala < lebar/390.
+    final extra = math.max(0.0, (size.width / scale - 390) / 2);
+    canvas.translate(extra, 0);
     final sky = _p(0, .3);
 
     // Matahari
@@ -98,18 +123,19 @@ class _HeroPainter extends CustomPainter {
     }
 
     // Pesawat melintas dengan jejak putus-putus
-    final px = -20 + loop.value * 480;
+    final laneY = math.max(60.0, (topInset + 18) / scale);
+    final px = -extra - 20 + loop.value * (390 + 2 * extra + 90);
     drawDashed(
       canvas,
       Path()
-        ..moveTo(px - 70, 60)
-        ..lineTo(px - 6, 60),
+        ..moveTo(px - 70, laneY)
+        ..lineTo(px - 6, laneY),
       _stroke(AppColors.ink, 1.5, sky),
       dash: 4,
       gap: 4,
     );
     canvas.save();
-    canvas.translate(px + 12, 60);
+    canvas.translate(px + 12, laneY);
     drawPlane(canvas, opacity: sky);
     canvas.restore();
 
@@ -117,14 +143,16 @@ class _HeroPainter extends CustomPainter {
     _layer(canvas, _p(.08, .48), () {
       canvas.drawPath(
         Path()
-          ..moveTo(0, 290)
+          ..moveTo(-400, 290)
+          ..lineTo(0, 290)
           ..lineTo(70, 200)
           ..lineTo(130, 262)
           ..lineTo(200, 168)
           ..lineTo(290, 272)
           ..lineTo(390, 214)
-          ..lineTo(390, 400)
-          ..lineTo(0, 400)
+          ..lineTo(800, 214)
+          ..lineTo(800, 400)
+          ..lineTo(-400, 400)
           ..close(),
         _fill(AppColors.mountainFar, _p(.08, .48)),
       );
@@ -132,13 +160,15 @@ class _HeroPainter extends CustomPainter {
     _layer(canvas, _p(.15, .55), () {
       canvas.drawPath(
         Path()
-          ..moveTo(0, 335)
+          ..moveTo(-400, 335)
+          ..lineTo(0, 335)
           ..lineTo(90, 250)
           ..lineTo(170, 322)
           ..lineTo(262, 236)
           ..lineTo(390, 330)
-          ..lineTo(390, 400)
-          ..lineTo(0, 400)
+          ..lineTo(800, 330)
+          ..lineTo(800, 400)
+          ..lineTo(-400, 400)
           ..close(),
         _fill(AppColors.mountainMid, _p(.15, .55)),
       );
@@ -146,11 +176,13 @@ class _HeroPainter extends CustomPainter {
     _layer(canvas, _p(.22, .62), () {
       canvas.drawPath(
         Path()
-          ..moveTo(0, 372)
+          ..moveTo(-400, 372)
+          ..lineTo(0, 372)
           ..quadraticBezierTo(120, 330, 230, 366)
           ..quadraticBezierTo(340, 402, 390, 350)
-          ..lineTo(390, 400)
-          ..lineTo(0, 400)
+          ..lineTo(800, 350)
+          ..lineTo(800, 400)
+          ..lineTo(-400, 400)
           ..close(),
         _fill(AppColors.hill, _p(.22, .62)),
       );
@@ -207,5 +239,6 @@ class _HeroPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_HeroPainter oldDelegate) => false;
+  bool shouldRepaint(_HeroPainter old) =>
+      old.scale != scale || old.topInset != topInset;
 }

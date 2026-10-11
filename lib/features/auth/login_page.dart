@@ -33,6 +33,11 @@ class _LoginPageState extends State<LoginPage>
   final _pwCtrl = TextEditingController();
   bool _done = false;
 
+  /// true di layar pendek / saat keyboard terbuka: jarak antar elemen dirapatkan.
+  bool _compact = false;
+
+  double _g(double v) => _compact ? v * .72 : v;
+
   late final AnimationController _enter = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2000),
@@ -119,31 +124,59 @@ class _LoginPageState extends State<LoginPage>
   @override
   Widget build(BuildContext context) {
     final ctrl = context.watch<LoginController>();
-    final size = MediaQuery.sizeOf(context);
-    final scale = size.width / 390;
-    // Posisi sheet di mockup = 350 (dari tinggi 844). Pada layar yang lebih pendek
-    // sheet dinaikkan dan ilustrasi ikut bergeser ke atas supaya tetap serasi.
-    final sheetTop = math.max(200.0, math.min(350 * scale, size.height - _sheetMinHeight));
-    final heroTop = sheetTop - 350 * scale;
+    final mq = MediaQuery.of(context);
+    final keyboard = mq.viewInsets.bottom > 0;
 
     return Scaffold(
       backgroundColor: AppColors.sky,
-      body: Stack(
-        children: [
-          Positioned(
-            top: heroTop,
-            left: 0,
-            right: 0,
-            child: HeroIllustration(enter: _enter),
-          ),
-          Positioned(
-            top: sheetTop,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SlideTransition(position: _sheetSlide, child: _sheet(ctrl)),
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, box) {
+          // Semua ukuran diturunkan dari area yang benar-benar tersedia
+          // (sudah memperhitungkan keyboard), bukan angka tetap.
+          final w = box.maxWidth;
+          final h = box.maxHeight;
+          _compact = h < 720 || keyboard;
+          final need = (_compact ? 440.0 : _sheetMinHeight) +
+              (keyboard ? 0 : mq.padding.bottom);
+          final minTop = keyboard ? 120.0 : 200.0;
+          final maxTop = 350 * w / 390; // posisi sheet di mockup
+          final sheetTop = (h - need).clamp(minTop, maxTop).toDouble();
+          // Ilustrasi selalu mulai dari atas layar dan diskalakan agar muat di
+          // atas sheet, jadi pesawat/matahari tidak pernah terpotong.
+          final heroScale = sheetTop / 350;
+
+          return Stack(
+            children: [
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: heroScale),
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOut,
+                  builder: (_, v, __) => HeroIllustration(
+                    enter: _enter,
+                    scale: v,
+                    topInset: mq.padding.top,
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOut,
+                top: sheetTop,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SlideTransition(
+                  position: _sheetSlide,
+                  child: _sheet(ctrl),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -202,21 +235,21 @@ class _LoginPageState extends State<LoginPage>
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: _g(14)),
         _in(
           1,
           Text.rich(
             TextSpan(children: [
-              TextSpan(text: 'Masuk untuk Mulai\n', style: AppTheme.heading(24)),
+              TextSpan(text: 'Masuk untuk Mulai\n', style: AppTheme.heading(_compact ? 21 : 24)),
               TextSpan(
                 text: 'Petualanganmu',
-                style: AppTheme.heading(24, color: AppColors.teal),
+                style: AppTheme.heading(_compact ? 21 : 24, color: AppColors.teal),
               ),
             ]),
             textAlign: TextAlign.center,
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: _g(16)),
         _in(
           2,
           AppTextField(
@@ -231,7 +264,7 @@ class _LoginPageState extends State<LoginPage>
                 : null,
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: _g(14)),
         _in(
           3,
           AppTextField(
@@ -256,7 +289,7 @@ class _LoginPageState extends State<LoginPage>
                 (v == null || v.length < 6) ? 'Password minimal 6 karakter' : null,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: _g(8)),
         _in(
           4,
           Row(
@@ -293,12 +326,12 @@ class _LoginPageState extends State<LoginPage>
             ],
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: _g(6)),
         _in(
           5,
           PrimaryButton(label: 'Masuk', loading: ctrl.isLoading, onPressed: _submit),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: _g(16)),
         _in(
           6,
           Row(
@@ -315,7 +348,7 @@ class _LoginPageState extends State<LoginPage>
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: _g(14)),
         _in(
           7,
           Row(
@@ -338,7 +371,7 @@ class _LoginPageState extends State<LoginPage>
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: _g(12)),
         _in(
           8,
           Row(

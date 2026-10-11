@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'features/auth/login_page.dart';
-import 'features/home/home_placeholder_page.dart';
+import 'features/shell/main_shell.dart';
 import 'features/splash/splash_page.dart';
 
 class AppRoutes {
@@ -16,7 +16,7 @@ class AppRoutes {
     if (settings.name == login) {
       page = const LoginPage();
     } else if (settings.name == home) {
-      page = const HomePlaceholderPage();
+      page = const MainShell();
     } else {
       page = const SplashPage();
     }

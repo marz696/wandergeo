@@ -5,7 +5,9 @@
 //  - Nama aplikasi di HP menjadi "WanderGeo" (Android + iOS)
 //  - Android: izin INTERNET (font & Supabase di build release) dan USE_BIOMETRIC,
 //    MainActivity memakai FlutterFragmentActivity (wajib untuk local_auth)
-//  - iOS: NSFaceIDUsageDescription untuk login wajah
+//  - Android: izin lokasi (ACCESS_COARSE/FINE_LOCATION) untuk LBS
+//  - iOS: NSFaceIDUsageDescription (login wajah) dan
+//    NSLocationWhenInUseUsageDescription (LBS)
 import 'dart:io';
 
 const appName = 'WanderGeo';
@@ -25,7 +27,12 @@ void _patchAndroidManifest() {
   }
   var s = f.readAsStringSync();
   s = s.replaceFirst(RegExp(r'android:label="[^"]*"'), 'android:label="$appName"');
-  for (final perm in ['INTERNET', 'USE_BIOMETRIC']) {
+  for (final perm in [
+    'INTERNET',
+    'USE_BIOMETRIC',
+    'ACCESS_COARSE_LOCATION',
+    'ACCESS_FINE_LOCATION',
+  ]) {
     if (!s.contains('android.permission.$perm')) {
       s = s.replaceFirst(
         '<application',
@@ -73,6 +80,11 @@ void _patchInfoPlist() {
     s,
     'NSFaceIDUsageDescription',
     'Dipakai untuk membuka Paspor Agen dengan wajah.',
+  );
+  s = _setPlistString(
+    s,
+    'NSLocationWhenInUseUsageDescription',
+    'Dipakai untuk menghitung jarak dari posisimu ke negara tujuan.',
   );
   f.writeAsStringSync(s);
   stdout.writeln('✓ Info.plist');
