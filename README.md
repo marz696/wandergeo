@@ -25,12 +25,15 @@ Butuh Edge Function `login` yang mengembalikan `{ "token": "..." }`.
 masing-masing punya varian `.onDark`. Belum dipakai di halaman login (mockup tidak menampilkannya di sana).
 
 ## Eksplorasi
-`lib/features/explore/`: pencarian + filter status + urut (jarak/nama/kesulitan), peta ASEAN/UK,
-penanda negara (selesai/terbuka/terkunci), daftar "Dekat kamu", rekomendasi AI, bottom sheet detail negara.
-- LBS: `core/services/location_service.dart` (geolocator, cadangan Jakarta bila izin ditolak) + haversine di `core/utils/geo_utils.dart`.
-- Sensor 1: `core/services/compass_service.dart` (flutter_compass). Di emulator tanpa sensor, jarum diam di utara.
+`lib/features/explore/`: peta penuh layar (`flutter_map` + tile OpenStreetMap, tanpa API key/billing),
+header (judul, Alat Perjalanan, Tanya Pemandu, koin), pencarian, filter status, urut, pengalih ASEAN/UK,
+pin negara (selesai/terbuka/terkunci), carousel negara, dan panel detail.
+- LBS: `core/services/location_service.dart` (geolocator, cadangan Jakarta) + haversine di `core/utils/geo_utils.dart`.
+- Sensor 1: `core/services/compass_service.dart` (flutter_compass). Di emulator tanpa sensor, jarum diam.
+- API: Wikipedia REST (ringkasan + foto, `wikipedia_service.dart`) dan Open-Meteo (cuaca, `weather_service.dart`). Keduanya gratis tanpa key.
 - Rekomendasi AI (non-LLM): `features/explore/logic/recommender.dart`.
 - Data awal: `features/explore/data/country_seed.dart` (12 negara, status contoh). Ganti dengan SQLite + Supabase nanti.
 - Tombol Alat Perjalanan, Tanya Pemandu, dan Mulai Misi masih menampilkan snackbar "segera hadir".
+- Atribusi "© OpenStreetMap contributors" wajib tetap tampil; tile publik OSM hanya untuk pemakaian ringan.
 
-Setelah menimpa file, jalankan lagi `flutter pub get` dan `dart run tool/setup_platform.dart` (izin lokasi baru).
+Setelah menimpa file, jalankan lagi `flutter pub get` dan `dart run tool/setup_platform.dart` (izin lokasi + internet).

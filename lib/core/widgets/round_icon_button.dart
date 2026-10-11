@@ -9,12 +9,16 @@ class RoundIconButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.size = 44,
+    this.iconColor = AppColors.ink,
+    this.elevated = true,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final double size;
+  final Color iconColor;
+  final bool elevated;
 
   @override
   Widget build(BuildContext context) {
@@ -22,14 +26,18 @@ class RoundIconButton extends StatelessWidget {
       message: label,
       child: Material(
         color: Colors.white,
-        shape: const CircleBorder(side: BorderSide(color: AppColors.border)),
+        elevation: elevated ? 4 : 0,
+        shadowColor: AppColors.ink.withOpacity(.25),
+        shape: CircleBorder(
+          side: BorderSide(color: elevated ? Colors.transparent : AppColors.border),
+        ),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(icon, size: 22, color: AppColors.ink),
+            child: Icon(icon, size: 22, color: iconColor),
           ),
         ),
       ),
