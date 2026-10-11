@@ -22,10 +22,19 @@ const LOCK_MINUTES = 15;
 // Dipakai agar waktu respons "username tidak ada" mirip dengan "password salah".
 const DUMMY_HASH = bcrypt.hashSync("dummy-password-wandergeo", 10);
 
+// CORS: wajib agar aplikasi yang berjalan di browser (Flutter Web) bisa memanggil
+// fungsi ini. Browser mengirim permintaan OPTIONS dulu sebelum POST. Aman karena
+// autentikasi memakai token di body, bukan cookie.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 
 function randomToken(): string {
@@ -164,6 +173,7 @@ async function userFromToken(token: string) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   // deno-lint-ignore no-explicit-any
   let body: any;

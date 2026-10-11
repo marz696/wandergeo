@@ -79,6 +79,10 @@ class _Resp {
 /// memverifikasi hash bcrypt di tabel `users` lalu mengembalikan token sesi
 /// yang disimpan di Secure Storage bila "Ingat saya" aktif.
 class AuthRepository {
+  static const _notConfigured =
+      'Aplikasi belum terhubung ke server. Jalankan dengan '
+      '--dart-define-from-file=dart_defines.json.';
+
   AuthRepository({SecureStorageService? storage})
       : _storage = storage ?? SecureStorageService();
 
@@ -100,6 +104,7 @@ class AuthRepository {
       }
       return _finish(_mockSession(identifier), remember);
     }
+    if (!AppConfig.isConfigured) return const AuthResult.failure(_notConfigured);
     final r = await _call('login', {
       'identifier': identifier,
       'password': password,
@@ -117,6 +122,7 @@ class AuthRepository {
       await Future<void>.delayed(const Duration(milliseconds: 1200));
       return _finish(_mockSession(email, username: username, fullName: fullName), true);
     }
+    if (!AppConfig.isConfigured) return const AuthResult.failure(_notConfigured);
     final r = await _call('register', {
       'full_name': fullName,
       'username': username,
@@ -144,6 +150,7 @@ class AuthRepository {
       if (cached != null) _session = AuthSession(token, cached);
       return true;
     }
+    if (!AppConfig.isConfigured) return false;
 
     final r = await _call('me', {'token': token});
     if (r.networkError) {
