@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../routes.dart';
 import '../auth/auth_repository.dart';
 import '../explore/explore_page.dart';
+import '../profile/profile_page.dart';
 import 'floating_nav_bar.dart';
 import 'tab_placeholder_page.dart';
 
@@ -58,11 +59,7 @@ class _MainShellState extends State<MainShell> {
       title: 'Paspor Digital',
       subtitle: 'Koleksi stempel dan verifikasi rantai blockchain menyusul.',
     ),
-    TabPlaceholderPage(
-      icon: Icons.person_rounded,
-      title: 'Profil',
-      subtitle: 'Foto, gelar petualang, dan pengaturan menyusul.',
-    ),
+    ProfilePage(),
     TabPlaceholderPage(
       icon: Icons.chat_bubble_rounded,
       title: 'Kesan & Saran',

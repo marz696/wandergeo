@@ -7,7 +7,8 @@
 //    MainActivity memakai FlutterFragmentActivity (wajib untuk local_auth)
 //  - Android: izin lokasi (ACCESS_COARSE/FINE_LOCATION) untuk LBS
 //  - iOS: NSFaceIDUsageDescription (login wajah) dan
-//    NSLocationWhenInUseUsageDescription (LBS)
+//    NSLocationWhenInUseUsageDescription (LBS), serta
+//    NSCameraUsageDescription dan NSPhotoLibraryUsageDescription (foto profil)
 import 'dart:io';
 
 const appName = 'WanderGeo';
@@ -85,6 +86,16 @@ void _patchInfoPlist() {
     s,
     'NSLocationWhenInUseUsageDescription',
     'Dipakai untuk menghitung jarak dari posisimu ke negara tujuan.',
+  );
+  s = _setPlistString(
+    s,
+    'NSCameraUsageDescription',
+    'Dipakai untuk mengambil foto profil.',
+  );
+  s = _setPlistString(
+    s,
+    'NSPhotoLibraryUsageDescription',
+    'Dipakai untuk memilih foto profil dari galeri.',
   );
   f.writeAsStringSync(s);
   stdout.writeln('✓ Info.plist');

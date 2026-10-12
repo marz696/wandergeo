@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -172,6 +172,55 @@ async function userFromToken(token: string) {
   return row.users;
 }
 
+// Data profil: akun + ringkasan progres paspor dari tabel `user_progress`.
+// Tabel itu terkunci RLS dari Data API, jadi dibaca di sini lewat service role,
+// dan HANYA untuk pemilik token (id user diambil dari sesi, bukan dari body).
+// deno-lint-ignore no-explicit-any
+async function profile(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+
+  const { data, error } = await supabase
+    .from("user_progress")
+    .select("status, best_score")
+    .eq("user_id", user.id);
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const count = (status: string) => rows.filter((r) => r.status === status).length;
+  return json(200, {
+    user: publicUser(user),
+    stats: {
+      selesai: count("selesai"),
+      terbuka: count("terbuka"),
+      terkunci: count("terkunci"),
+      total: rows.length,
+      total_score: rows.reduce((sum, r) => sum + (r.best_score ?? 0), 0),
+    },
+  });
+}
+
+// Ubah nama tampilan. Hanya `full_name` yang boleh diubah dari sini.
+// deno-lint-ignore no-explicit-any
+async function updateProfile(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+
+  const fullName = String(b.full_name ?? "").trim();
+  if (fullName.length < 2 || fullName.length > 60) {
+    return json(400, { error: "Nama 2-60 karakter" });
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .update({ full_name: fullName })
+    .eq("id", user.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return json(200, { user: publicUser(data) });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
@@ -193,6 +242,10 @@ Deno.serve(async (req) => {
         const user = await userFromToken(String(body.token ?? ""));
         return user ? json(200, { user: publicUser(user) }) : json(401, { error: "Sesi tidak valid" });
       }
+      case "profile":
+        return await profile(body);
+      case "update_profile":
+        return await updateProfile(body);
       case "logout": {
         const token = String(body.token ?? "");
         if (token) {

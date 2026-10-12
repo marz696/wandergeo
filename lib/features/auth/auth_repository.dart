@@ -25,6 +25,15 @@ class AuthUser {
   String get displayName =>
       (fullName != null && fullName!.trim().isNotEmpty) ? fullName! : username;
 
+  AuthUser copyWith({String? fullName}) => AuthUser(
+        id: id,
+        username: username,
+        email: email,
+        title: title,
+        fullName: fullName ?? this.fullName,
+        avatarUrl: avatarUrl,
+      );
+
   factory AuthUser.fromJson(Map<String, dynamic> j) => AuthUser(
         id: j['id'] as String,
         username: j['username'] as String,
@@ -64,6 +73,55 @@ class AuthResult {
   final String? message;
 }
 
+/// Ringkasan progres paspor milik satu pengguna (dari tabel `user_progress`).
+class ProfileStats {
+  const ProfileStats({
+    required this.selesai,
+    required this.terbuka,
+    required this.terkunci,
+    required this.total,
+    required this.totalScore,
+  });
+
+  final int selesai;
+  final int terbuka;
+  final int terkunci;
+  final int total;
+  final int totalScore;
+
+  factory ProfileStats.fromJson(Map<String, dynamic> j) => ProfileStats(
+        selesai: (j['selesai'] as num?)?.toInt() ?? 0,
+        terbuka: (j['terbuka'] as num?)?.toInt() ?? 0,
+        terkunci: (j['terkunci'] as num?)?.toInt() ?? 0,
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        totalScore: (j['total_score'] as num?)?.toInt() ?? 0,
+      );
+
+  /// Hanya dipakai di mode mock (tanpa server).
+  static const sample = ProfileStats(
+    selesai: 1,
+    terbuka: 2,
+    terkunci: 9,
+    total: 12,
+    totalScore: 80,
+  );
+}
+
+class ProfileResult {
+  const ProfileResult.success(this.user, [this.stats])
+      : ok = true,
+        message = null;
+  const ProfileResult.failure(this.message)
+      : ok = false,
+        user = null,
+        stats = null;
+
+  final bool ok;
+  final AuthUser? user;
+  final ProfileStats? stats;
+  final String? message;
+}
+
 class _Resp {
   const _Resp(this.status, this.data);
 
@@ -80,8 +138,8 @@ class _Resp {
 /// yang disimpan di Secure Storage bila "Ingat saya" aktif.
 class AuthRepository {
   static const _notConfigured =
-      'Aplikasi belum terhubung ke server. Jalankan dengan '
-      '--dart-define-from-file=dart_defines.json.';
+      'Aplikasi belum terhubung ke server. Periksa URL dan kunci Supabase '
+      'di app_config.dart.';
 
   AuthRepository({SecureStorageService? storage})
       : _storage = storage ?? SecureStorageService();
@@ -179,7 +237,82 @@ class AuthRepository {
     }
   }
 
+  /// Data akun + statistik progres terbaru dari server (aksi `profile`).
+  Future<ProfileResult> fetchProfile() => _profileCall('profile', const {});
+
+  /// Mengubah nama tampilan di tabel `users` (aksi `update_profile`).
+  Future<ProfileResult> updateFullName(String fullName) =>
+      _profileCall('update_profile', {'full_name': fullName});
+
   // ---------- internal ----------
+
+  Future<ProfileResult> _profileCall(
+    String action,
+    Map<String, dynamic> extra,
+  ) async {
+    final s = _session;
+    if (s == null) {
+      return const ProfileResult.failure(
+        'Sesi tidak ditemukan. Silakan login ulang.',
+      );
+    }
+
+    if (AppConfig.useMock) {
+      if (action == 'update_profile') {
+        final user = s.user.copyWith(fullName: extra['full_name'] as String?);
+        await _saveUser(user);
+        return ProfileResult.success(user);
+      }
+      return ProfileResult.success(s.user, ProfileStats.sample);
+    }
+    if (!AppConfig.isConfigured) {
+      return const ProfileResult.failure(_notConfigured);
+    }
+
+    final r = await _call(action, {'token': s.token, ...extra});
+    if (r.networkError) {
+      return const ProfileResult.failure(
+        'Tidak dapat terhubung ke server. Periksa internet lalu coba lagi.',
+      );
+    }
+
+    final d = r.data;
+    final u = d?['user'];
+    if (r.status == 200 && u is Map) {
+      final user = AuthUser.fromJson(Map<String, dynamic>.from(u));
+      await _saveUser(user);
+      final st = d?['stats'];
+      return ProfileResult.success(
+        user,
+        st is Map ? ProfileStats.fromJson(Map<String, dynamic>.from(st)) : null,
+      );
+    }
+    if (r.status == 401) {
+      return const ProfileResult.failure(
+        'Sesi berakhir. Silakan keluar lalu login ulang.',
+      );
+    }
+    final error = d?['error'] as String?;
+    if (r.status == 400 && error == 'Aksi tidak dikenal') {
+      return const ProfileResult.failure(
+        'Server belum mendukung fitur ini. Perbarui fungsi auth di Supabase.',
+      );
+    }
+    return ProfileResult.failure(
+      error ?? 'Terjadi kesalahan (kode ${r.status}).',
+    );
+  }
+
+  /// Memperbarui data user di sesi berjalan, dan di Secure Storage bila sesi
+  /// memang disimpan ("Ingat saya").
+  Future<void> _saveUser(AuthUser user) async {
+    final s = _session;
+    if (s == null) return;
+    _session = AuthSession(s.token, user);
+    if (await _storage.readToken() != null) {
+      await _storage.saveSession(s.token, jsonEncode(user.toJson()));
+    }
+  }
 
   AuthSession _mockSession(String identifier,
       {String? username, String? fullName}) {
