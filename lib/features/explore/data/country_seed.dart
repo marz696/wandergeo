@@ -1,14 +1,15 @@
 import '../models/country.dart';
 
-/// Data awal 12 negara (sama dengan seed di geoquest_schema.sql).
-/// Nanti diganti: baca dari SQLite lokal yang disinkronkan dengan Supabase.
+/// Data cadangan 12 negara (sama dengan seed di geoquest_schema_v2.sql).
+/// Dipakai HANYA saat SQLite masih kosong dan perangkat offline; kondisi
+/// normal: data dibaca dari Supabase lalu disimpan di SQLite.
 class CountrySeed {
   CountrySeed._();
 
   static const _a = CountryRegion.asean;
 
   static const List<Country> all = [
-    Country(code: 'ID', name: 'Indonesia', capital: 'Jakarta', language: 'Bahasa Indonesia', lat: -6.2088, lng: 106.8456, region: _a, currency: 'IDR', utcLabel: 'UTC+7 (WIB)', difficulty: 1, status: CountryStatus.selesai, bestScore: 80),
+    Country(code: 'ID', name: 'Indonesia', capital: 'Jakarta', language: 'Bahasa Indonesia', lat: -6.2088, lng: 106.8456, region: _a, currency: 'IDR', utcLabel: 'UTC+7 (WIB)', difficulty: 1, status: CountryStatus.terbuka),
     Country(code: 'MY', name: 'Malaysia', capital: 'Kuala Lumpur', language: 'Bahasa Melayu', lat: 3.1390, lng: 101.6869, region: _a, currency: 'MYR', utcLabel: 'UTC+8 (setara WITA)', difficulty: 1, status: CountryStatus.terbuka),
     Country(code: 'SG', name: 'Singapura', capital: 'Singapura', language: 'Inggris, Melayu, Mandarin, Tamil', lat: 1.3521, lng: 103.8198, region: _a, currency: 'SGD', utcLabel: 'UTC+8 (setara WITA)', difficulty: 1, status: CountryStatus.terbuka),
     Country(code: 'TH', name: 'Thailand', capital: 'Bangkok', language: 'Thai', lat: 13.7563, lng: 100.5018, region: _a, currency: 'THB', utcLabel: 'UTC+7 (setara WIB)', difficulty: 2),

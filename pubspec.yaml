@@ -22,6 +22,7 @@ dependencies:
   http: ^1.2.2
   sqflite: ^2.3.3+1
   image_picker: ^1.1.2
+  sensors_plus: ^6.1.0
   path_provider: ^2.1.4
 
 dev_dependencies:

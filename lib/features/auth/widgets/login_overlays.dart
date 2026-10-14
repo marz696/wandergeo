@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/animated_check.dart';
 import '../login_controller.dart';
 
 /// Layar "Verifikasi identitas": ikon biometrik berdenyut + tombol Batal.
@@ -119,68 +118,6 @@ class _BiometricOverlayState extends State<BiometricOverlay>
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Layar "Berhasil masuk": centang beranimasi + tombol Mulai menjelajah.
-/// Isinya baru dibangun saat [visible] agar centang tergambar saat muncul.
-class SuccessOverlay extends StatelessWidget {
-  const SuccessOverlay({super.key, required this.visible, required this.onContinue});
-
-  final bool visible;
-  final VoidCallback onContinue;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: !visible,
-      child: AnimatedOpacity(
-        opacity: visible ? 1 : 0,
-        duration: const Duration(milliseconds: 400),
-        child: ColoredBox(
-          color: Colors.white,
-          child: visible
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const AnimatedCheck(),
-                        const SizedBox(height: 14),
-                        Text('Berhasil masuk', style: AppTheme.heading(22)),
-                        const SizedBox(height: 14),
-                        const Text(
-                          'Selamat datang kembali, Agen. Paspormu sudah aktif.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, color: AppColors.muted),
-                        ),
-                        const SizedBox(height: 22),
-                        SizedBox(
-                          height: 54,
-                          child: ElevatedButton(
-                            onPressed: onContinue,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.ink,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 40),
-                              shape: const StadiumBorder(),
-                            ),
-                            child: Text(
-                              'Mulai menjelajah',
-                              style: AppTheme.heading(16, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : const SizedBox.expand(),
         ),
       ),
     );

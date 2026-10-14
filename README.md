@@ -31,6 +31,12 @@ sesi berupa token acak yang di server hanya disimpan sebagai hash SHA-256. Langk
 Jalankan dengan kunci: salin `dart_defines.example.json` menjadi `dart_defines.json`, isi, lalu
 `flutter run --dart-define-from-file=dart_defines.json`. Tambahkan `dart_defines.json` ke `.gitignore`.
 
+## Misi
+`features/mission/`: tiap negara punya 3 misi. Trivia (20 soal, 15 detik/soal) dan Kuliner & Budaya (4 kartu flip) WAJIB;
+Mini Game "Tangkap Koin" (accelerometer) opsional. Negara selesai bila trivia dan budaya lulus; saat itu 2 negara terkunci
+terdekat dibuka. Penilaian dilakukan di server (Edge Function `auth`: `country_missions`, `mission_content`, `submit_mission`).
+Jalankan `supabase/migrations/002_misi.sql` (240 soal, 48 kartu) dan deploy ulang fungsi `auth`.
+
 ## Alat Perjalanan
 `features/tools/`: konversi mata uang (12 mata uang, kurs Frankfurter v2 lewat `core/services/currency_service.dart`,
 disimpan di SQLite `core/database/app_database.dart` agar jalan offline) dan konversi waktu WIB/WITA/WIT/London

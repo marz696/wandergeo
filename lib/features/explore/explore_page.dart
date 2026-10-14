@@ -4,14 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/services/compass_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/geo_utils.dart';
 import '../../core/widgets/round_icon_button.dart';
-import 'data/country_seed.dart';
+import 'data/country_repository.dart';
+import '../auth/auth_repository.dart';
+import '../mission/mission_hub_page.dart';
 import '../tools/alat_perjalanan_page.dart';
 import 'logic/recommender.dart';
 import 'models/country.dart';
@@ -80,8 +84,12 @@ class _ExplorePageState extends State<ExplorePage>
 
   PageController _pages = PageController(viewportFraction: .82);
 
-  final List<Country> _countries = List.of(CountrySeed.all);
-  final int _coins = 120; // contoh; nanti dari Supabase
+  final _repo = CountryRepository();
+  List<Country> _countries = const [];
+  bool _syncing = false;
+
+  /// Koin dari akun (bertambah saat misi pertama kali diselesaikan).
+  int get _coins => context.read<AuthRepository>().currentUser?.coins ?? 0;
 
   CountryRegion _region = CountryRegion.asean;
   CountryStatus? _status;
@@ -96,6 +104,7 @@ class _ExplorePageState extends State<ExplorePage>
   void initState() {
     super.initState();
     _loadLocation();
+    _loadCountries();
   }
 
   @override
@@ -107,6 +116,27 @@ class _ExplorePageState extends State<ExplorePage>
     _pages.dispose();
     _map.dispose();
     super.dispose();
+  }
+
+  /// SQLite dulu (cepat, bisa offline), lalu sinkron dari Supabase.
+  Future<void> _loadCountries({bool silent = false}) async {
+    final auth = context.read<AuthRepository>();
+    final userId = auth.currentUser?.id ?? 'guest';
+    if (!silent) {
+      final local = await _repo.loadLocal(userId);
+      if (!mounted) return;
+      setState(() => _countries = local);
+    }
+    if (AppConfig.useMock || auth.session == null) return;
+
+    setState(() => _syncing = true);
+    final progress = await auth.fetchProgress();
+    final fresh = await _repo.refresh(userId: userId, progress: progress);
+    if (!mounted) return;
+    setState(() {
+      _syncing = false;
+      if (fresh != null) _countries = fresh;
+    });
   }
 
   Future<void> _loadLocation() async {
@@ -222,6 +252,15 @@ class _ExplorePageState extends State<ExplorePage>
         backgroundColor: AppColors.ink,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ));
+  }
+
+  /// Buka daftar misi negara; setelah kembali, muat ulang status & koin.
+  Future<void> _openMissions(Country c) async {
+    HapticFeedback.selectionClick();
+    await Navigator.of(context).push(MissionHubPage.route(c));
+    if (!mounted) return;
+    setState(() {}); // koin baru
+    _loadCountries(silent: true);
   }
 
   void _openTools({String? currency}) {
@@ -388,9 +427,15 @@ class _ExplorePageState extends State<ExplorePage>
         country: selected,
         distanceKm: _distance(selected),
         approximate: _user?.approximate ?? true,
-        onStart: () => _soon('Misi ${selected.name}'),
+        onStart: () => _openMissions(selected),
         onTools: () => _openTools(currency: selected.currency),
         onClose: _closeSheet,
+      );
+    } else if (_countries.isEmpty) {
+      panel = const SizedBox(
+        key: ValueKey('loading'),
+        height: 116,
+        child: Center(child: CircularProgressIndicator()),
       );
     } else if (items.isEmpty) {
       panel = const _EmptyCard(key: ValueKey('empty'));
@@ -611,7 +656,8 @@ class _ExplorePageState extends State<ExplorePage>
               Text('Eksplorasi', style: AppTheme.heading(26)),
               const SizedBox(height: 2),
               Text(
-                '$done dari ${_countries.length} negara selesai',
+                '$done dari ${_countries.length} negara selesai'
+                '${_syncing ? ' · menyinkronkan…' : ''}',
                 style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
               ),
             ],

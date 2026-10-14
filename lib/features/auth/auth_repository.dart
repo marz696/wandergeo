@@ -13,6 +13,7 @@ class AuthUser {
     required this.title,
     this.fullName,
     this.avatarUrl,
+    this.coins = 0,
   });
 
   final String id;
@@ -21,17 +22,19 @@ class AuthUser {
   final String title;
   final String? fullName;
   final String? avatarUrl;
+  final int coins;
 
   String get displayName =>
       (fullName != null && fullName!.trim().isNotEmpty) ? fullName! : username;
 
-  AuthUser copyWith({String? fullName}) => AuthUser(
+  AuthUser copyWith({String? fullName, int? coins}) => AuthUser(
         id: id,
         username: username,
         email: email,
         title: title,
         fullName: fullName ?? this.fullName,
         avatarUrl: avatarUrl,
+        coins: coins ?? this.coins,
       );
 
   factory AuthUser.fromJson(Map<String, dynamic> j) => AuthUser(
@@ -41,6 +44,7 @@ class AuthUser {
         title: (j['title'] as String?) ?? 'Petualang Pemula',
         fullName: j['full_name'] as String?,
         avatarUrl: j['avatar_url'] as String?,
+        coins: (j['coins'] as num?)?.toInt() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -50,6 +54,7 @@ class AuthUser {
         'title': title,
         'full_name': fullName,
         'avatar_url': avatarUrl,
+        'coins': coins,
       };
 }
 
@@ -120,6 +125,23 @@ class ProfileResult {
   final AuthUser? user;
   final ProfileStats? stats;
   final String? message;
+}
+
+/// Hasil pemanggilan Edge Function untuk fitur lain (misi, dll).
+class ApiResponse {
+  const ApiResponse(this.status, this.data);
+
+  final int status; // 0 = gagal terhubung
+  final Map<String, dynamic>? data;
+
+  bool get ok => status >= 200 && status < 300;
+  bool get networkError => status == 0;
+
+  String get message =>
+      (data?['error'] as String?) ??
+      (networkError
+          ? 'Tidak dapat terhubung ke server. Periksa internet lalu coba lagi.'
+          : 'Terjadi kesalahan (kode $status).');
 }
 
 class _Resp {
@@ -243,6 +265,48 @@ class AuthRepository {
   /// Mengubah nama tampilan di tabel `users` (aksi `update_profile`).
   Future<ProfileResult> updateFullName(String fullName) =>
       _profileCall('update_profile', {'full_name': fullName});
+
+  /// Progres tiap negara milik pengguna (aksi `progress`). Tabel
+  /// `user_progress` terkunci dari Data API, jadi dibaca lewat Edge Function.
+  /// Null bila gagal, offline, atau mode mock.
+  Future<List<Map<String, dynamic>>?> fetchProgress() async {
+    final s = _session;
+    if (s == null || AppConfig.useMock || !AppConfig.isConfigured) return null;
+    final r = await _call('progress', {'token': s.token});
+    final list = r.data?['progress'];
+    if (r.status == 200 && list is List) {
+      return [
+        for (final e in list)
+          if (e is Map) Map<String, dynamic>.from(e),
+      ];
+    }
+    return null;
+  }
+
+  /// Memanggil aksi Edge Function dengan token sesi yang sedang aktif.
+  Future<ApiResponse> authed(String action, Map<String, dynamic> body) async {
+    final sess = _session;
+    if (sess == null) {
+      return const ApiResponse(401, {'error': 'Sesi berakhir. Silakan masuk lagi.'});
+    }
+    if (AppConfig.useMock || !AppConfig.isConfigured) {
+      return const ApiResponse(
+          0, {'error': 'Fitur ini membutuhkan koneksi ke server.'});
+    }
+    final r = await _call(action, {...body, 'token': sess.token});
+    return ApiResponse(r.status, r.data);
+  }
+
+  /// Memperbarui jumlah koin setelah misi selesai (memori + penyimpanan aman).
+  Future<void> updateCoins(int coins) async {
+    final sess = _session;
+    if (sess == null) return;
+    final user = sess.user.copyWith(coins: coins);
+    _session = AuthSession(sess.token, user);
+    if (await _storage.readToken() != null) {
+      await _storage.saveSession(sess.token, jsonEncode(user.toJson()));
+    }
+  }
 
   // ---------- internal ----------
 

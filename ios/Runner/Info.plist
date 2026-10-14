@@ -70,5 +70,9 @@
 	<string>Dipakai untuk membuka Paspor Agen dengan wajah.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Dipakai untuk menghitung jarak dari posisimu ke negara tujuan.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Dipakai untuk mengambil foto profil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Dipakai untuk memilih foto profil dari galeri.</string>
 </dict>
 </plist>
