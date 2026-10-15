@@ -11,6 +11,7 @@ import '../passport/passport_page.dart';
 import '../profile/profile_page.dart';
 import 'floating_nav_bar.dart';
 import 'tab_placeholder_page.dart';
+import '../feedback/feedback_page.dart';
 
 /// Kerangka utama setelah login: 5 tab (Eksplorasi, Paspor Digital, Profil,
 /// Kesan & Saran, Logout). Logout tidak berpindah halaman, hanya dialog.
@@ -60,11 +61,7 @@ class _MainShellState extends State<MainShell> {
     const ExplorePage(),
     PassportPage(refresh: _passportTick),
     const ProfilePage(),
-    const TabPlaceholderPage(
-      icon: Icons.chat_bubble_rounded,
-      title: 'Kesan & Saran',
-      subtitle: 'Form kesan dan saran mata kuliah PAM menyusul.',
-    ),
+    const FeedbackPage(),
   ];
 
   @override

@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_save, feedback_delete, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -505,7 +505,7 @@ async function submitMission(b: any) {
   const justCompleted = completeNow && !wasDone;
   const unlocked = justCompleted ? await unlockNext(user.id, m.country_code) : [];
 
-    // Negara selesai = satu blok baru di paspor. Gagal mencatat stempel tidak boleh
+  // Negara selesai = satu blok baru di paspor. Gagal mencatat stempel tidak boleh
   // menggagalkan misi; stempel akan dibuat otomatis saat paspor dibuka.
   let stamp: { block_index: number } | null = null;
   if (justCompleted) {
@@ -671,7 +671,7 @@ async function passport(b: any) {
     broken_at: brokenAt,
     total_countries: count ?? 0,
     stamps: out.filter((x) => x.country_code).length,
-    blocks: out,    
+    blocks: out,
   });
 }
 
@@ -911,6 +911,78 @@ async function guideQuiz(b: any) {
   }
 }
 
+// =====================================================
+// KESAN & SARAN (menu Kesan dan Saran mata kuliah PAM)
+// Tabel `feedbacks` terkunci RLS dari Data API; semua akses lewat sini, dan
+// id user selalu diambil dari sesi, bukan dari body.
+// =====================================================
+const FEEDBACK_MIN = 5;
+const FEEDBACK_MAX = 1000;
+const FEEDBACK_COOLDOWN_MS = 20_000; // cegah kirim berulang tak sengaja
+
+// deno-lint-ignore no-explicit-any
+async function feedbackList(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const { data, error } = await supabase
+    .from("feedbacks")
+    .select("id, impression, suggestion, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return json(200, { items: data ?? [] });
+}
+
+// deno-lint-ignore no-explicit-any
+async function feedbackSave(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+
+  const impression = String(b.impression ?? "").trim();
+  const suggestion = String(b.suggestion ?? "").trim();
+  if (impression.length < FEEDBACK_MIN) {
+    return json(400, { error: `Kesan minimal ${FEEDBACK_MIN} karakter` });
+  }
+  if (impression.length > FEEDBACK_MAX || suggestion.length > FEEDBACK_MAX) {
+    return json(400, { error: `Maksimal ${FEEDBACK_MAX} karakter per kolom` });
+  }
+
+  const { data: last } = await supabase
+    .from("feedbacks")
+    .select("created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (last && Date.now() - new Date(last.created_at).getTime() < FEEDBACK_COOLDOWN_MS) {
+    return json(429, { error: "Tunggu sebentar sebelum mengirim lagi" });
+  }
+
+  const { data, error } = await supabase
+    .from("feedbacks")
+    .insert({ user_id: user.id, impression, suggestion: suggestion || null })
+    .select("id, impression, suggestion, created_at")
+    .single();
+  if (error) throw error;
+  return json(201, { item: data });
+}
+
+// deno-lint-ignore no-explicit-any
+async function feedbackDelete(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const id = Number(b.id);
+  if (!Number.isInteger(id)) return json(400, { error: "ID tidak valid" });
+  const { error } = await supabase
+    .from("feedbacks")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id); // hanya milik sendiri
+  if (error) throw error;
+  return json(200, { ok: true });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
@@ -950,6 +1022,12 @@ Deno.serve(async (req) => {
         return await guideChat(body);
       case "guide_quiz":
         return await guideQuiz(body);
+      case "feedback_list":
+        return await feedbackList(body);
+      case "feedback_save":
+        return await feedbackSave(body);
+      case "feedback_delete":
+        return await feedbackDelete(body);
       case "passport":
         return await passport(body);
       case "logout": {
