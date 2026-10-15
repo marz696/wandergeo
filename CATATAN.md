@@ -1,14 +1,17 @@
-# Update: Misi (trivia 20 soal, kuliner & budaya, mini game)
+# Update: Tanya Pemandu (Gemini)
 
-Urutan pemasangan:
+1. GOOGLE AI STUDIO (aistudio.google.com): buat API key (gratis; tidak perlu kartu untuk tier gratis).
+2. SUPABASE > SQL Editor: jalankan supabase/migrations/003_pemandu.sql.
+3. SUPABASE > Edge Functions > Secrets: tambah
+     GEMINI_API_KEY = (key dari langkah 1)
+   Opsional:
+     GEMINI_MODEL = nama model, dipisah koma bila lebih dari satu (cek daftar model di AI Studio)
+     GUIDE_DAILY_LIMIT = batas pertanyaan per pengguna per hari (bawaan 10)
+4. SUPABASE > Edge Functions > auth: tempel ulang supabase/functions/auth/index.ts, Deploy
+   (Verify JWT tetap MATI).
+5. FLUTTER: timpa file di zip ini, lalu flutter run. Tidak ada paket baru.
+   Database lokal naik ke versi 3 otomatis (tabel chat_messages).
+6. Uji: Eksplorasi > ikon bintang (Tanya Pemandu).
 
-1. SUPABASE > SQL Editor: jalankan `supabase/migrations/002_misi.sql`
-   (aman dijalankan ulang; memuat 36 misi, 240 soal, 48 kartu budaya).
-2. SUPABASE > Edge Functions > `auth`: tempel ulang isi `supabase/functions/auth/index.ts`, Deploy.
-   (Verify JWT tetap MATI.)
-3. Proyek Flutter: timpa file-file di zip ini (struktur folder sama), hapus file di HAPUS_FILE.txt
-   bila belum, lalu `flutter pub get` (ada paket baru: sensors_plus) dan `flutter run`.
-4. Uji: Eksplorasi > pilih negara terbuka > Mulai Misi.
-
-Catatan: arah miring accelerometer bisa terbalik di sebagian HP. Ubah `_tiltSign`
-(1 atau -1) di lib/features/mission/minigame_page.dart.
+Catatan: jangan tulis data pribadi di chat. Pada tier gratis, Google dapat memakai
+permintaan untuk meningkatkan produknya.

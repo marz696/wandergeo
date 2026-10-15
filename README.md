@@ -37,6 +37,14 @@ Mini Game "Tangkap Koin" (accelerometer) opsional. Negara selesai bila trivia da
 terdekat dibuka. Penilaian dilakukan di server (Edge Function `auth`: `country_missions`, `mission_content`, `submit_mission`).
 Jalankan `supabase/migrations/002_misi.sql` (240 soal, 48 kartu) dan deploy ulang fungsi `auth`.
 
+## Tanya Pemandu (LLM)
+`features/guide/`: chat dengan Gemini seputar negara pilihan (tanya bebas, rencana, etika, dan soal latihan dibuat AI).
+API key TIDAK ada di aplikasi: dipanggil dari Edge Function `auth` (aksi `guide_chat`, `guide_quiz`, `guide_quota`).
+Kuota 10 pertanyaan per pengguna per hari (reset 00.00 WIB). Riwayat teks disimpan di SQLite (`chat_messages`).
+Setup: jalankan `supabase/migrations/003_pemandu.sql`, buat API key di Google AI Studio, simpan sebagai secret
+`GEMINI_API_KEY` di Supabase, lalu deploy ulang fungsi `auth`. Nama model bisa diganti lewat secret `GEMINI_MODEL`
+(daftar dipisah koma, dicoba berurutan; bawaan `gemini-3.8-flash,gemini-3.5-flash-lite`).
+
 ## Alat Perjalanan
 `features/tools/`: konversi mata uang (12 mata uang, kurs Frankfurter v2 lewat `core/services/currency_service.dart`,
 disimpan di SQLite `core/database/app_database.dart` agar jalan offline) dan konversi waktu WIB/WITA/WIT/London

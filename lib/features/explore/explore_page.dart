@@ -15,6 +15,7 @@ import '../../core/utils/geo_utils.dart';
 import '../../core/widgets/round_icon_button.dart';
 import 'data/country_repository.dart';
 import '../auth/auth_repository.dart';
+import '../guide/guide_page.dart';
 import '../mission/mission_hub_page.dart';
 import '../tools/alat_perjalanan_page.dart';
 import 'logic/recommender.dart';
@@ -261,6 +262,11 @@ class _ExplorePageState extends State<ExplorePage>
     if (!mounted) return;
     setState(() {}); // koin baru
     _loadCountries(silent: true);
+  }
+
+  void _openGuide() {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(GuidePage.route(initialCountry: _selected));
   }
 
   void _openTools({String? currency}) {
@@ -672,7 +678,7 @@ class _ExplorePageState extends State<ExplorePage>
         RoundIconButton(
           icon: Icons.auto_awesome_rounded,
           label: 'Tanya Pemandu',
-          onTap: () => _soon('Tanya Pemandu'),
+          onTap: _openGuide,
         ),
         const SizedBox(width: 8),
         Container(

@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
-/// Database lokal (SQLite): cache kurs, negara, dan progres pengguna.
+/// Database lokal (SQLite): cache kurs, negara, progres pengguna, dan riwayat chat.
 /// Tabel baru (misi, stempel paspor) ditambahkan dengan menaikkan `version`
 /// dan menulis langkahnya di `onUpgrade`.
 class AppDatabase {
@@ -16,16 +16,20 @@ class AppDatabase {
     final dir = await getDatabasesPath();
     return openDatabase(
       '$dir/wandergeo.db',
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await _createRates(db);
         await _createCountries(db);
         await _createProgress(db);
+        await _createChat(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await _createCountries(db);
           await _createProgress(db);
+        }
+        if (oldVersion < 3) {
+          await _createChat(db);
         }
       },
     );
@@ -69,4 +73,20 @@ class AppDatabase {
       PRIMARY KEY (user_id, country_code)
     )
   ''');
+
+  /// Riwayat percakapan Tanya Pemandu (teks saja).
+  Future<void> _createChat(Database db) async {
+    await db.execute('''
+      CREATE TABLE chat_messages (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      TEXT NOT NULL,
+        country_code TEXT NOT NULL,
+        role         TEXT NOT NULL,
+        text         TEXT NOT NULL,
+        created_at   INTEGER NOT NULL
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX chat_messages_idx ON chat_messages (user_id, country_code, id)');
+  }
 }
