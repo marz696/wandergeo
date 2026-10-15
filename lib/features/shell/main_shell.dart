@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../routes.dart';
 import '../auth/auth_repository.dart';
 import '../explore/explore_page.dart';
+import '../passport/passport_page.dart';
 import '../profile/profile_page.dart';
 import 'floating_nav_bar.dart';
 import 'tab_placeholder_page.dart';
@@ -52,20 +53,25 @@ class _MainShellState extends State<MainShell> {
     ),
   ];
 
-  static const _pages = <Widget>[
-    ExplorePage(),
-    TabPlaceholderPage(
-      icon: Icons.badge_rounded,
-      title: 'Paspor Digital',
-      subtitle: 'Koleksi stempel dan verifikasi rantai blockchain menyusul.',
-    ),
-    ProfilePage(),
-    TabPlaceholderPage(
+  // Dinaikkan tiap tab Paspor dibuka, supaya stempel baru langsung muncul.
+  final _passportTick = ValueNotifier<int>(0);
+
+  late final List<Widget> _pages = <Widget>[
+    const ExplorePage(),
+    PassportPage(refresh: _passportTick),
+    const ProfilePage(),
+    const TabPlaceholderPage(
       icon: Icons.chat_bubble_rounded,
       title: 'Kesan & Saran',
       subtitle: 'Form kesan dan saran mata kuliah PAM menyusul.',
     ),
   ];
+
+  @override
+  void dispose() {
+    _passportTick.dispose();
+    super.dispose();
+  }
 
   int _index = 0;
 
@@ -75,6 +81,7 @@ class _MainShellState extends State<MainShell> {
       return;
     }
     if (i == _index) return;
+    if (i == 1) _passportTick.value++;
     HapticFeedback.selectionClick();
     setState(() => _index = i);
   }

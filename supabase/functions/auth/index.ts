@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, progress, country_missions, mission_content, submit_mission, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, progress, country_missions, mission_content, submit_mission, passport, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -504,6 +504,16 @@ async function submitMission(b: any) {
   );
   const justCompleted = completeNow && !wasDone;
   const unlocked = justCompleted ? await unlockNext(user.id, m.country_code) : [];
+  // Negara selesai = satu blok baru di paspor. Gagal mencatat stempel tidak boleh
+  // menggagalkan misi; stempel akan dibuat otomatis saat paspor dibuka.
+  let stamp: { block_index: number } | null = null;
+  if (justCompleted) {
+    try {
+      stamp = await stampCountry(user.id, m.country_code, m.id, countryScore);
+    } catch (e) {
+      console.error("stamp", e);
+    }
+  }
 
   return json(200, {
     passed,
@@ -516,6 +526,151 @@ async function submitMission(b: any) {
     country: { code: m.country_code, status: newStatus, best_score: countryScore },
     country_completed: justCompleted,
     unlocked,
+    stamp,
+  });
+}
+
+// =====================================================
+// PASPOR DIGITAL: blockchain sederhana (hash chain per pengguna)
+// Blok 0 = genesis. Tiap negara yang selesai menambah satu blok berisi
+// hash blok sebelumnya, sehingga mengubah satu blok merusak semua blok sesudahnya.
+// Ini tamper-evident (perubahan terdeteksi), bukan tamper-proof.
+// =====================================================
+const POW_PREFIX = "00"; // proof-of-work ringan: hash harus diawali "00"
+
+function blockHash(
+  index: number, ts: string, userId: string, country: string | null,
+  missionId: number | null, score: number, prev: string, nonce: number,
+): Promise<string> {
+  return sha256([index, ts, userId, country ?? "", missionId ?? "", score, prev, nonce].join("|"));
+}
+
+async function mine(
+  index: number, ts: string, userId: string, country: string | null,
+  missionId: number | null, score: number, prev: string,
+) {
+  let nonce = 0;
+  while (true) {
+    const hash = await blockHash(index, ts, userId, country, missionId, score, prev, nonce);
+    if (hash.startsWith(POW_PREFIX)) return { hash, nonce };
+    nonce++;
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+async function lastBlock(userId: string): Promise<any> {
+  const { data } = await supabase
+    .from("passport_stamps")
+    .select("block_index, hash")
+    .eq("user_id", userId)
+    .order("block_index", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+// Tambah satu blok. Bila dua permintaan berebut indeks yang sama, unique(user_id,
+// block_index) menolak salah satunya dan kita coba lagi dengan ujung rantai baru.
+async function appendBlock(
+  userId: string, country: string | null, missionId: number | null, score: number,
+) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const last = await lastBlock(userId);
+    const index = last ? last.block_index + 1 : 0;
+    const prev = last ? last.hash : "0";
+    const ts = new Date().toISOString(); // presisi milidetik, dihash apa adanya
+    const { hash, nonce } = await mine(index, ts, userId, country, missionId, score, prev);
+    const { error } = await supabase.from("passport_stamps").insert({
+      user_id: userId, block_index: index, country_code: country, mission_id: missionId,
+      score, timestamp: ts, previous_hash: prev, hash, nonce,
+    });
+    if (!error) return { block_index: index, hash };
+    if (error.code !== "23505") throw error;
+    if (country) { // mungkin stempel negara ini sudah ada (permintaan ganda)
+      const { data } = await supabase.from("passport_stamps").select("block_index, hash")
+        .eq("user_id", userId).eq("country_code", country).maybeSingle();
+      if (data) return data;
+    }
+  }
+  throw new Error("Gagal menambah blok paspor");
+}
+
+// Stempel untuk negara yang baru selesai (tidak membuat duplikat).
+async function stampCountry(userId: string, country: string, missionId: number, score: number) {
+  if (!(await lastBlock(userId))) await appendBlock(userId, null, null, 0); // genesis
+  const { data: ex } = await supabase.from("passport_stamps").select("block_index")
+    .eq("user_id", userId).eq("country_code", country).maybeSingle();
+  if (ex) return ex;
+  return await appendBlock(userId, country, missionId, score);
+}
+
+// Daftar blok + verifikasi seluruh rantai (hitung ulang tiap hash dan tautannya).
+// deno-lint-ignore no-explicit-any
+async function passport(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+
+  // Akun lama: buat genesis dan stempel untuk negara yang sudah selesai sebelum fitur ini ada.
+  if (!(await lastBlock(user.id))) await appendBlock(user.id, null, null, 0);
+  const { data: done } = await supabase.from("user_progress")
+    .select("country_code, best_score, updated_at")
+    .eq("user_id", user.id).eq("status", "selesai").order("updated_at");
+  const { data: have } = await supabase.from("passport_stamps").select("country_code")
+    .eq("user_id", user.id);
+  // deno-lint-ignore no-explicit-any
+  const stamped = new Set((have ?? []).map((r: any) => r.country_code));
+  // deno-lint-ignore no-explicit-any
+  for (const d of (done ?? []) as any[]) {
+    if (stamped.has(d.country_code)) continue;
+    const { data: tm } = await supabase.from("missions").select("id")
+      .eq("country_code", d.country_code).eq("type", "trivia").maybeSingle();
+    await stampCountry(user.id, d.country_code, tm?.id ?? null as unknown as number, d.best_score ?? 0);
+  }
+
+  const { data: rows, error } = await supabase.from("passport_stamps")
+    .select("block_index, country_code, mission_id, score, timestamp, previous_hash, hash, nonce")
+    .eq("user_id", user.id).order("block_index");
+  if (error) throw error;
+  const { data: cs } = await supabase.from("countries").select("code, name, capital, flag_url");
+  // deno-lint-ignore no-explicit-any
+  const info = new Map((cs ?? []).map((c: any) => [c.code, c]));
+
+  let prevHash = "0";
+  let brokenAt: number | null = null;
+  // deno-lint-ignore no-explicit-any
+  const blocks = (rows ?? []).map((r: any, i: number) => ({ r, i }));
+  const out = [];
+  for (const { r, i } of blocks) {
+    const ts = new Date(r.timestamp).toISOString();
+    const calc = await blockHash(
+      r.block_index, ts, user.id, r.country_code, r.mission_id, r.score, r.previous_hash, Number(r.nonce),
+    );
+    const ok = r.block_index === i && r.previous_hash === prevHash && calc === r.hash &&
+      r.hash.startsWith(POW_PREFIX);
+    if (!ok && brokenAt === null) brokenAt = r.block_index;
+    prevHash = r.hash;
+    const c = r.country_code ? info.get(r.country_code) : null;
+    out.push({
+      index: r.block_index,
+      country_code: r.country_code,
+      country_name: c?.name ?? null,
+      capital: c?.capital ?? null,
+      flag_url: c?.flag_url ?? null,
+      score: r.score,
+      timestamp: ts,
+      previous_hash: r.previous_hash,
+      hash: r.hash,
+      nonce: Number(r.nonce),
+      valid: brokenAt === null || r.block_index < brokenAt,
+    });
+  }
+  const { count } = await supabase.from("countries").select("code", { count: "exact", head: true });
+  return json(200, {
+    valid: brokenAt === null,
+    broken_at: brokenAt,
+    total_countries: count ?? 0,
+    stamps: out.filter((x) => x.country_code).length,
+    blocks: out,
   });
 }
 
@@ -552,6 +707,8 @@ Deno.serve(async (req) => {
         return await missionContent(body);
       case "submit_mission":
         return await submitMission(body);
+      case "passport":
+        return await passport(body);
       case "logout": {
         const token = String(body.token ?? "");
         if (token) {
