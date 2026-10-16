@@ -314,87 +314,121 @@ class _GuidePageState extends State<GuidePage> with SingleTickerProviderStateMix
   }
 
   Widget _header() {
-    final c = _country;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [BoxShadow(color: AppColors.ink.withOpacity(.06), blurRadius: 12, offset: const Offset(0, 4))],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          RoundIconButton(
-            icon: Icons.arrow_back_rounded,
-            label: 'Kembali',
-            size: 42,
-            elevated: false,
-            onTap: () => Navigator.of(context).maybePop(),
-          ),
-          const SizedBox(width: 10),
-          _Avatar(size: 40, pulse: _busy ? _pulse : null),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Pemandu WanderGeo',
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTheme.heading(15.5)),
-                Row(
+          Row(
+            children: [
+              RoundIconButton(
+                icon: Icons.arrow_back_rounded,
+                label: 'Kembali',
+                size: 42,
+                elevated: false,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+              const SizedBox(width: 10),
+              _Avatar(size: 40, pulse: _busy ? _pulse : null),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _banner == _Banner.offline ? AppColors.error : AppColors.success,
-                      ),
+                    Text('Pemandu WanderGeo',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTheme.heading(15.5)),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _banner == _Banner.offline ? AppColors.error : AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(_banner == _Banner.offline ? 'Offline' : 'Didukung AI',
+                            style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
+                      ],
                     ),
-                    const SizedBox(width: 5),
-                    Text(_banner == _Banner.offline ? 'Offline' : 'Didukung AI',
-                        style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
                   ],
                 ),
-              ],
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(19),
-            onTap: _pickCountry,
-            child: Container(
-              height: 38,
-              padding: const EdgeInsets.fromLTRB(6, 0, 8, 0),
-              decoration: BoxDecoration(
-                color: AppColors.sea,
-                borderRadius: BorderRadius.circular(19),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: AppColors.teal, borderRadius: BorderRadius.circular(9)),
-                    child: Text(c.code,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  const Icon(Icons.expand_more_rounded, size: 18),
+              PopupMenuButton<String>(
+                tooltip: 'Menu',
+                icon: const Icon(Icons.more_vert_rounded),
+                onSelected: (v) {
+                  if (v == 'clear') _confirmClear();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'clear', child: Text('Hapus percakapan')),
                 ],
               ),
-            ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Menu',
-            icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (v) {
-              if (v == 'clear') _confirmClear();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'clear', child: Text('Hapus percakapan')),
             ],
           ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _countryBar(),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// Pemilih negara: baris tersendiri di bawah judul agar tidak berebut ruang
+  /// dengan nama "Pemandu WanderGeo".
+  Widget _countryBar() {
+    final c = _country;
+    return Material(
+      color: AppColors.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _pickCountry,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.teal,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(c.code,
+                    style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Negara yang dibahas',
+                        style: TextStyle(fontSize: 10.5, color: AppColors.muted)),
+                    Text(c.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  ],
+                ),
+              ),
+              const Text('Ganti',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.teal)),
+              const Icon(Icons.expand_more_rounded, size: 20, color: AppColors.teal),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -100,14 +100,12 @@ class _MissionHubPageState extends State<MissionHubPage>
     );
   });
 
-  Animation<double> _slot(int i) => _slots[math.min(i, _slots.length - 1)];
-
   Widget _reveal(int i, Widget child) {
-    final a = _slot(i);
+    final a = _slots[math.min(i, _slots.length - 1)];
     return FadeTransition(
       opacity: a,
       child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, .12), end: Offset.zero).animate(a),
+        position: Tween<Offset>(begin: const Offset(0, .1), end: Offset.zero).animate(a),
         child: child,
       ),
     );
@@ -139,10 +137,30 @@ class _MissionHubPageState extends State<MissionHubPage>
               ),
             ),
             const SizedBox(height: 16),
-            _reveal(1, _hero(c, doneCount, requiredDone)),
-            const SizedBox(height: 20),
-            _reveal(2, Text('Pilih misi', style: AppTheme.heading(17))),
-            const SizedBox(height: 10),
+            _reveal(1, _Hero(country: c, done: doneCount)),
+            const SizedBox(height: 26),
+            _reveal(
+              2,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('Misi', style: AppTheme.heading(18)),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        'Selesaikan dua misi wajib untuk mendapat stempel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             if (_error != null)
               _reveal(3, _errorCard())
             else if (ms == null)
@@ -151,8 +169,8 @@ class _MissionHubPageState extends State<MissionHubPage>
               for (var i = 0; i < ms.length; i++)
                 _reveal(3 + i, _MissionCard(mission: ms[i], onTap: () => _open(ms[i]))),
             if (requiredDone) ...[
-              const SizedBox(height: 6),
-              _reveal(6, _completeBanner(c)),
+              const SizedBox(height: 4),
+              _reveal(6, _CompleteBanner(country: c)),
             ],
           ],
         ),
@@ -160,122 +178,141 @@ class _MissionHubPageState extends State<MissionHubPage>
     );
   }
 
-  Widget _hero(Country c, int done, bool requiredDone) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
-          colors: [AppColors.deepNavy, AppColors.teal],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _errorCard() => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
         ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(.18),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(c.code,
-                style: AppTheme.heading(22, color: Colors.white)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 34, color: AppColors.hint),
+            const SizedBox(height: 8),
+            Text(_error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.muted, height: 1.4)),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: _load, child: const Text('Coba lagi')),
+          ],
+        ),
+      );
+}
+
+/// Kartu negara: latar navy polos dengan garis tipis, tanpa gradien.
+class _Hero extends StatelessWidget {
+  const _Hero({required this.country, required this.done});
+
+  final Country country;
+  final int done;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = country;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        color: AppColors.ink,
+        child: CustomPaint(
+          painter: _RingsPainter(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Row(
               children: [
-                Text(c.capital, style: AppTheme.heading(20, color: Colors.white)),
-                const SizedBox(height: 2),
-                Text('${c.language} · ${c.currency}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(.85), fontSize: 12.5)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    for (var i = 0; i < 3; i++)
-                      Icon(Icons.star_rounded,
-                          size: 16,
-                          color: i < c.difficulty
-                              ? AppColors.gold
-                              : Colors.white.withOpacity(.3)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withOpacity(.35)),
+                        ),
+                        child: Text(c.code,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              letterSpacing: 1.4,
+                            )),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(c.capital, style: AppTheme.heading(24, color: Colors.white)),
+                      const SizedBox(height: 4),
+                      Text('${c.language} · ${c.currency}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white.withOpacity(.7), fontSize: 12.5)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          for (var i = 0; i < 3; i++)
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 5),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: i < c.difficulty
+                                    ? AppColors.gold
+                                    : Colors.white.withOpacity(.25),
+                              ),
+                            ),
+                          const SizedBox(width: 3),
+                          Text('Tingkat ${c.difficulty}',
+                              style: TextStyle(
+                                  color: Colors.white.withOpacity(.7), fontSize: 11.5)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: done / 3),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, v, __) => ProgressRing(
+                    value: v,
+                    size: 66,
+                    stroke: 5,
+                    track: Colors.white.withOpacity(.18),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('$done/3', style: AppTheme.heading(15, color: Colors.white)),
+                        Text('misi',
+                            style: TextStyle(color: Colors.white.withOpacity(.6), fontSize: 10)),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: done / 3),
-            duration: const Duration(milliseconds: 900),
-            curve: Curves.easeOutCubic,
-            builder: (_, v, __) => ProgressRing(
-              value: v,
-              child: Text('$done/3',
-                  style: AppTheme.heading(15, color: Colors.white)),
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+}
+
+/// Lingkaran konsentris tipis sebagai tekstur latar (bukan warna).
+class _RingsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = Colors.white.withOpacity(.06);
+    final c = Offset(size.width * .92, -size.height * .1);
+    for (var r = 40.0; r < size.width; r += 34) {
+      canvas.drawCircle(c, r, p);
+    }
   }
 
-  Widget _completeBanner(Country c) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8F6EF),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.success.withOpacity(.4)),
-      ),
-      child: Row(
-        children: [
-          StampBadge(code: c.code, name: c.name, size: 72),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Negara selesai!',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                        color: Color(0xFF1F7A52))),
-                SizedBox(height: 2),
-                Text('Trivia dan Kuliner & Budaya sudah lulus. Mini game tetap bisa dimainkan untuk bonus.',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.muted, height: 1.35)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _errorCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.cloud_off_rounded, size: 36, color: AppColors.hint),
-          const SizedBox(height: 8),
-          Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted)),
-          const SizedBox(height: 10),
-          OutlinedButton(onPressed: _load, child: const Text('Coba lagi')),
-        ],
-      ),
-    );
-  }
+  @override
+  bool shouldRepaint(_RingsPainter old) => false;
 }
 
 class _MissionCard extends StatelessWidget {
@@ -284,98 +321,110 @@ class _MissionCard extends StatelessWidget {
   final MissionInfo mission;
   final VoidCallback onTap;
 
-  ({IconData icon, List<Color> colors, String subtitle}) get _v => switch (mission.type) {
-        'trivia' => (
-            icon: Icons.quiz_rounded,
-            colors: const [AppColors.teal, AppColors.deepNavy],
-            subtitle: '20 soal · ±7 menit',
-          ),
-        'kuliner_budaya' => (
-            icon: Icons.restaurant_menu_rounded,
-            colors: const [AppColors.gold, Color(0xFFC98F12)],
-            subtitle: '4 kartu belajar',
-          ),
-        _ => (
-            icon: Icons.sports_esports_rounded,
-            colors: const [Color(0xFF6C5CE7), Color(0xFF4834B8)],
-            subtitle: 'Tangkap koin · 20 detik',
-          ),
+  ({IconData icon, String subtitle}) get _v => switch (mission.type) {
+        'trivia' => (icon: Icons.quiz_outlined, subtitle: '20 soal · ±7 menit'),
+        'kuliner_budaya' =>
+          (icon: Icons.restaurant_menu_outlined, subtitle: '4 kartu belajar'),
+        _ => (icon: Icons.sports_esports_outlined, subtitle: 'Tangkap koin · 20 detik'),
       };
 
   @override
   Widget build(BuildContext context) {
     final v = _v;
+    final done = mission.completed;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: Colors.white,
-        elevation: 3,
-        shadowColor: AppColors.ink.withOpacity(.15),
-        borderRadius: BorderRadius.circular(22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: done ? AppColors.success.withOpacity(.35) : AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
             child: Row(
               children: [
+                // Satu gaya ikon untuk semua misi: lembut, satu warna aksen.
                 Container(
-                  width: 54,
-                  height: 54,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(17),
-                    gradient: LinearGradient(
-                      colors: v.colors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: done ? const Color(0xFFE8F6EF) : AppColors.sea,
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(v.icon, color: Colors.white),
+                  child: Icon(
+                    done ? Icons.check_rounded : v.icon,
+                    size: 24,
+                    color: done ? AppColors.success : AppColors.teal,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(mission.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.heading(15.5)),
+                      const SizedBox(height: 3),
                       Row(
                         children: [
+                          Text(
+                            mission.isRequired ? 'Wajib' : 'Opsional',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: mission.isRequired ? AppColors.teal : AppColors.hint,
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 6),
+                            child: Text('·', style: TextStyle(color: AppColors.hint)),
+                          ),
                           Flexible(
-                            child: Text(mission.title,
+                            child: Text(v.subtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppTheme.heading(16)),
+                                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                           ),
-                          const SizedBox(width: 6),
-                          _Tag(required: mission.isRequired),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(v.subtitle,
-                          style: const TextStyle(fontSize: 12.5, color: AppColors.muted)),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (mission.completed)
+                const SizedBox(width: 10),
+                if (done)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Icon(Icons.check_circle_rounded, color: AppColors.success),
+                      const Text('Selesai',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.success)),
+                      const SizedBox(height: 2),
                       Text('Skor ${mission.bestScore}',
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.success, fontWeight: FontWeight.w700)),
+                          style: const TextStyle(fontSize: 11.5, color: AppColors.muted)),
                     ],
                   )
                 else
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('+${mission.rewardCoins} koin',
+                      const Icon(Icons.monetization_on_outlined,
+                          size: 16, color: AppColors.goldDark),
+                      const SizedBox(width: 3),
+                      Text('+${mission.rewardCoins}',
                           style: const TextStyle(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               fontSize: 13,
                               color: AppColors.goldDark)),
-                      const Text('Mulai',
-                          style: TextStyle(fontSize: 11.5, color: AppColors.teal, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.chevron_right_rounded, color: AppColors.hint),
                     ],
                   ),
               ],
@@ -387,24 +436,41 @@ class _MissionCard extends StatelessWidget {
   }
 }
 
-class _Tag extends StatelessWidget {
-  const _Tag({required this.required});
+class _CompleteBanner extends StatelessWidget {
+  const _CompleteBanner({required this.country});
 
-  final bool required;
+  final Country country;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: required ? const Color(0xFFFBEFD0) : AppColors.sea,
-        borderRadius: BorderRadius.circular(7),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.success.withOpacity(.35)),
       ),
-      child: Text(required ? 'WAJIB' : 'OPSIONAL',
-          style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
-              color: required ? AppColors.goldDark : AppColors.deepNavy)),
+      child: Row(
+        children: [
+          StampBadge(code: country.code, name: country.name, size: 70),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Negara selesai',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.success)),
+                SizedBox(height: 3),
+                Text(
+                  'Dua misi wajib sudah lulus dan stempel masuk ke paspormu. Mini game tetap bisa dimainkan untuk bonus koin.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.muted, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -418,11 +484,11 @@ class _MissionSkeleton extends StatelessWidget {
       children: [
         for (var i = 0; i < 3; i++)
           Container(
-            height: 82,
+            height: 80,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.border),
             ),
           ),
