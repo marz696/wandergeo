@@ -17,6 +17,8 @@ import 'data/country_repository.dart';
 import '../auth/auth_repository.dart';
 import '../guide/guide_page.dart';
 import '../mission/mission_hub_page.dart';
+import '../notifications/notification_planner.dart';
+import '../notifications/notification_prompt.dart';
 import '../tools/alat_perjalanan_page.dart';
 import 'logic/recommender.dart';
 import 'models/country.dart';
@@ -88,6 +90,7 @@ class _ExplorePageState extends State<ExplorePage>
   final _repo = CountryRepository();
   List<Country> _countries = const [];
   bool _syncing = false;
+  bool _promptChecked = false;
 
   /// Koin dari akun (bertambah saat misi pertama kali diselesaikan).
   int get _coins => context.read<AuthRepository>().currentUser?.coins ?? 0;
@@ -127,6 +130,7 @@ class _ExplorePageState extends State<ExplorePage>
       final local = await _repo.loadLocal(userId);
       if (!mounted) return;
       setState(() => _countries = local);
+      _afterCountries();
     }
     if (AppConfig.useMock || auth.session == null) return;
 
@@ -137,6 +141,17 @@ class _ExplorePageState extends State<ExplorePage>
     setState(() {
       _syncing = false;
       if (fresh != null) _countries = fresh;
+    });
+    if (fresh != null) _afterCountries();
+  }
+
+  /// Jadwalkan ulang pengingat sesuai progres; tawarkan pengingat sekali saja.
+  void _afterCountries() {
+    NotificationPlanner.refresh(_countries);
+    if (_promptChecked || _countries.isEmpty) return;
+    _promptChecked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) NotificationPrompt.maybeShow(context, _countries);
     });
   }
 

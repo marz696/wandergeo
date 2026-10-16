@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mencegah R8 membuang ikon notifikasi pada build release. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_wandergeo,@mipmap/ic_launcher" />

@@ -45,6 +45,12 @@ Setup: jalankan `supabase/migrations/003_pemandu.sql`, buat API key di Google AI
 `GEMINI_API_KEY` di Supabase, lalu deploy ulang fungsi `auth`. Nama model bisa diganti lewat secret `GEMINI_MODEL`
 (daftar dipisah koma, dicoba berurutan; bawaan `gemini-3.8-flash,gemini-3.5-flash-lite`).
 
+## Notifikasi
+`features/notifications/`: notifikasi lokal (flutter_local_notifications, tanpa Firebase/server). Pengingat misi harian
+(jam bisa diatur, isi mengikuti progres, dijadwalkan 7 hari ke depan dan diperbarui tiap Eksplorasi dibuka) dan notifikasi
+pencapaian (negara selesai + negara baru terbuka). Pengaturan: Profil > Notifikasi. Ajakan aktivasi muncul sekali di Eksplorasi.
+Butuh desugaring Android (sudah diatur di `android/app/build.gradle.kts`) dan Flutter 3.38.1+.
+
 ## Alat Perjalanan
 `features/tools/`: konversi mata uang (12 mata uang, kurs Frankfurter v2 lewat `core/services/currency_service.dart`,
 disimpan di SQLite `core/database/app_database.dart` agar jalan offline) dan konversi waktu WIB/WITA/WIT/London

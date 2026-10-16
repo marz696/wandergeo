@@ -504,7 +504,6 @@ async function submitMission(b: any) {
   );
   const justCompleted = completeNow && !wasDone;
   const unlocked = justCompleted ? await unlockNext(user.id, m.country_code) : [];
-
   // Negara selesai = satu blok baru di paspor. Gagal mencatat stempel tidak boleh
   // menggagalkan misi; stempel akan dibuat otomatis saat paspor dibuka.
   let stamp: { block_index: number } | null = null;
@@ -1016,6 +1015,8 @@ Deno.serve(async (req) => {
         return await missionContent(body);
       case "submit_mission":
         return await submitMission(body);
+      case "passport":
+        return await passport(body);
       case "guide_quota":
         return await guideQuota(body);
       case "guide_chat":

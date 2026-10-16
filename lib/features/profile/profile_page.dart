@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/round_icon_button.dart';
 import '../auth/auth_repository.dart';
+import '../notifications/notification_settings_page.dart';
 
 /// Profil: foto, nama, gelar, progres paspor, dan akun.
 ///
@@ -669,6 +670,13 @@ class _ProfilePageState extends State<ProfilePage> {
             subtitle:
                 _photo == null ? 'Belum ada foto' : 'Ketuk untuk mengganti',
             onTap: _busy ? null : _choosePhotoSource,
+          ),
+          const _TileDivider(),
+          _SettingTile(
+            icon: Icons.notifications_none_rounded,
+            title: 'Notifikasi',
+            subtitle: 'Pengingat misi harian dan pencapaian',
+            onTap: () => Navigator.of(context).push(NotificationSettingsPage.route()),
           ),
           const _TileDivider(),
           const _SettingTile(

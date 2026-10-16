@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../explore/data/country_seed.dart';
 import '../explore/models/country.dart';
+import '../notifications/notification_planner.dart';
 import 'models/mission_models.dart';
 import 'widgets/mission_ui.dart';
 
@@ -70,6 +71,15 @@ class _MissionResultPageState extends State<MissionResultPage>
   void initState() {
     super.initState();
     _r.passed ? HapticFeedback.mediumImpact() : HapticFeedback.selectionClick();
+    if (_r.countryCompleted) {
+      // Beri waktu animasi stempel di layar sebelum notifikasi muncul.
+      Future<void>.delayed(const Duration(milliseconds: 1500), () {
+        NotificationPlanner.countryCompleted(
+          country: widget.country.name,
+          unlocked: [for (final c in _r.unlocked) _nameOf(c)],
+        );
+      });
+    }
   }
 
   @override
