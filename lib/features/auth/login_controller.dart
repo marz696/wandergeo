@@ -4,8 +4,6 @@ import '../../core/config/app_config.dart';
 import '../../core/services/biometric_service.dart';
 import 'auth_repository.dart';
 
-enum BiometricKind { fingerprint, face }
-
 enum BiometricResult { success, notAvailable, noSession, failed, cancelled }
 
 class LoginController extends ChangeNotifier {
@@ -19,7 +17,6 @@ class LoginController extends ChangeNotifier {
   bool isBiometricBusy = false;
   bool showPassword = false;
   bool remember = true;
-  BiometricKind biometricKind = BiometricKind.fingerprint;
   String? errorMessage;
   bool _cancelled = false;
 
@@ -50,10 +47,10 @@ class LoginController extends ChangeNotifier {
     return result.ok;
   }
 
-  /// Login biometrik membuka kembali sesi yang tersimpan di Secure Storage,
-  /// jadi pengguna harus pernah login dengan password + "Ingat saya".
-  Future<BiometricResult> loginWithBiometric(BiometricKind kind) async {
-    biometricKind = kind;
+  /// Login sidik jari membuka kembali sesi yang tersimpan di Secure Storage,
+  /// jadi pengguna harus pernah login dengan password + "Ingat saya". Sesi itu
+  /// tetap tersimpan setelah logout (lihat AuthRepository.logout).
+  Future<BiometricResult> loginWithBiometric() async {
     isBiometricBusy = true;
     _cancelled = false;
     notifyListeners();

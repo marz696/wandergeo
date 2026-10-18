@@ -2,19 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../login_controller.dart';
 
-/// Layar "Verifikasi identitas": ikon biometrik berdenyut + tombol Batal.
+/// Layar "Verifikasi identitas": ikon sidik jari berdenyut + tombol Batal.
 class BiometricOverlay extends StatefulWidget {
   const BiometricOverlay({
     super.key,
     required this.visible,
-    required this.kind,
     required this.onCancel,
   });
 
   final bool visible;
-  final BiometricKind kind;
   final VoidCallback onCancel;
 
   @override
@@ -52,7 +49,6 @@ class _BiometricOverlayState extends State<BiometricOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final fp = widget.kind == BiometricKind.fingerprint;
     return IgnorePointer(
       ignoring: !widget.visible,
       child: AnimatedOpacity(
@@ -87,8 +83,8 @@ class _BiometricOverlayState extends State<BiometricOverlay>
                             ),
                           ),
                         ),
-                        Icon(
-                          fp ? Icons.fingerprint : Icons.face_outlined,
+                        const Icon(
+                          Icons.fingerprint,
                           size: 56,
                           color: AppColors.teal,
                         ),
@@ -98,9 +94,9 @@ class _BiometricOverlayState extends State<BiometricOverlay>
                   const SizedBox(height: 14),
                   Text('Verifikasi identitas', style: AppTheme.heading(20)),
                   const SizedBox(height: 14),
-                  Text(
-                    fp ? 'Sentuh sensor sidik jari' : 'Pindai wajahmu',
-                    style: const TextStyle(fontSize: 14, color: AppColors.muted),
+                  const Text(
+                    'Sentuh sensor sidik jari',
+                    style: TextStyle(fontSize: 14, color: AppColors.muted),
                   ),
                   const SizedBox(height: 6),
                   TextButton(

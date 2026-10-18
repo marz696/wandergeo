@@ -18,9 +18,9 @@ import '../notifications/notification_settings_page.dart';
 /// Semua data teks berasal dari database lewat [AuthRepository]:
 /// - nama, username, email, gelar -> tabel `users`
 /// - jumlah negara selesai/terbuka/terkunci + total skor -> `user_progress`
-/// Nama tampilan bisa diubah dan tersimpan di database. Foto disimpan lokal
-/// per akun lewat [ProfileService]; bila belum ada foto lokal dan `avatar_url`
-/// di database terisi, foto dari URL itu yang ditampilkan.
+/// Nama tampilan bisa diubah dan tersimpan di database. Foto profil diunggah
+/// ke Supabase Storage; link-nya disimpan di `users.avatar_url` dan dimuat
+/// lewat link itu, jadi foto ikut akun di perangkat mana pun.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -34,6 +34,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   AuthUser? _user;
   ProfileStats? _stats;
+  // Pratinjau foto yang baru dipilih, ditampilkan langsung selagi diunggah.
+  // Sumber utama tetap link `avatar_url` dari database.
   Uint8List? _photo;
   int _photoVersion = 0; // memaksa gambar dibangun ulang saat foto berganti
 
@@ -42,26 +44,15 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _savingName = false;
   String? _error;
 
-  // Id user dari sesi; 'tamu' hanya cadangan bila sesi belum ada.
-  String get _userId => _user?.id ?? 'tamu';
+  bool get _hasPhoto =>
+      _photo != null || (_user?.avatarUrl?.trim().isNotEmpty ?? false);
   String get _name => _user?.displayName ?? 'Petualang WanderGeo';
 
   @override
   void initState() {
     super.initState();
     _user = _repo.currentUser;
-    _loadPhoto();
     _refresh();
-  }
-
-  Future<void> _loadPhoto() async {
-    try {
-      final photo = await _service.readPhoto(_userId);
-      if (!mounted) return;
-      setState(() => _photo = photo);
-    } catch (_) {
-      // Foto lokal tidak bisa dibaca: tampilkan huruf awal saja.
-    }
   }
 
   Future<void> _refresh() async {
@@ -139,7 +130,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 'Pilih dari galeri',
                 _PhotoAction.gallery,
               ),
-              if (_photo != null)
+              if (_hasPhoto)
                 _sheetTile(
                   ctx,
                   Icons.delete_outline_rounded,
@@ -162,8 +153,7 @@ class _ProfilePageState extends State<ProfilePage> {
         case _PhotoAction.gallery:
           await _pick(ImageSource.gallery);
         case _PhotoAction.remove:
-          await _service.removePhoto(_userId);
-          if (mounted) setState(() => _photo = null);
+          await _removePhoto();
       }
     } on PlatformException {
       _toast('Tidak bisa mengakses kamera atau galeri. Periksa izin aplikasi.');
@@ -174,16 +164,43 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Pilih foto lalu unggah ke Supabase. Pratinjau langsung tampil; bila
+  /// unggahan gagal, pratinjau dibatalkan supaya tampilan sama dengan database.
   Future<void> _pick(ImageSource source) async {
-    final bytes = await _service.pickPhoto(_userId, source);
+    final bytes = await _service.pickPhoto(source);
     if (bytes == null || !mounted) return;
+    final before = _photo;
     setState(() {
       _photo = bytes;
       _photoVersion++;
     });
-    _toast(kIsWeb
-        ? 'Foto diganti (di browser, foto hilang saat halaman dimuat ulang)'
-        : 'Foto profil diperbarui');
+    final r = await _repo.uploadAvatar(bytes);
+    if (!mounted) return;
+    if (r.ok) {
+      setState(() => _user = r.user ?? _user);
+      _toast('Foto profil diperbarui');
+    } else {
+      setState(() {
+        _photo = before;
+        _photoVersion++;
+      });
+      _toast(r.message ?? 'Foto gagal diunggah. Coba lagi.');
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    final r = await _repo.removeAvatar();
+    if (!mounted) return;
+    if (r.ok) {
+      setState(() {
+        _user = r.user ?? _user;
+        _photo = null;
+        _photoVersion++;
+      });
+      _toast('Foto profil dihapus');
+    } else {
+      _toast(r.message ?? 'Foto gagal dihapus. Coba lagi.');
+    }
   }
 
   Widget _sheetTile(
@@ -498,7 +515,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// Urutan: foto lokal -> avatar_url dari database -> huruf awal nama.
+  /// Urutan: pratinjau foto baru -> link avatar_url dari database -> huruf awal.
   Widget _avatarImage(String initial) {
     final photo = _photo;
     if (photo != null) {

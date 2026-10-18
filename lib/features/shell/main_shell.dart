@@ -93,8 +93,8 @@ class _MainShellState extends State<MainShell> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('Keluar dari WanderGeo?', style: AppTheme.heading(18)),
         content: const Text(
-          'Sesi login di perangkat ini akan dihapus. Kamu perlu masuk lagi '
-          'untuk melanjutkan petualangan.',
+          'Kamu akan kembali ke halaman login. Bila "Ingat saya" aktif, kamu '
+          'bisa masuk lagi dengan sidik jari.',
           style: TextStyle(color: AppColors.muted, height: 1.4),
         ),
         actions: [

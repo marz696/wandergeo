@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_save, feedback_delete, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_save, feedback_delete, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -219,6 +219,102 @@ async function updateProfile(b: any) {
     .select()
     .single();
   if (error) throw error;
+  return json(200, { user: publicUser(data) });
+}
+
+// =====================================================
+// FOTO PROFIL: file disimpan di Storage (bucket publik `avatars`), link
+// publiknya ditulis ke users.avatar_url. Klien tidak punya akses tulis ke
+// bucket; semua lewat sini setelah token sesi diverifikasi.
+// =====================================================
+const AVATAR_BUCKET = "avatars";
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+
+// Jenis file ditentukan dari isi (magic bytes), bukan dari klaim klien.
+function sniffImage(b: Uint8Array): { type: string; ext: string } | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    return { type: "image/jpeg", ext: "jpg" };
+  }
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { type: "image/png", ext: "png" };
+  }
+  if (
+    b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) {
+    return { type: "image/webp", ext: "webp" };
+  }
+  return null;
+}
+
+// Path objek di bucket dari link publiknya (null bila bukan link bucket ini).
+function avatarPathFromUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  const marker = `/object/public/${AVATAR_BUCKET}/`;
+  const i = url.indexOf(marker);
+  return i < 0 ? null : decodeURIComponent(url.slice(i + marker.length).split("?")[0]);
+}
+
+// deno-lint-ignore no-explicit-any
+async function uploadAvatar(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+
+  const raw = String(b.image_base64 ?? "");
+  // Batas kasar sebelum decode: base64 ~ 4/3 ukuran asli.
+  if (!raw || raw.length > Math.ceil(AVATAR_MAX_BYTES * 4 / 3) + 8) {
+    return json(400, { error: "Foto kosong atau lebih dari 2 MB" });
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+  } catch {
+    return json(400, { error: "Data foto tidak valid" });
+  }
+  if (bytes.length > AVATAR_MAX_BYTES) return json(400, { error: "Foto lebih dari 2 MB" });
+  const kind = sniffImage(bytes);
+  if (!kind) return json(400, { error: "Format foto harus JPG, PNG, atau WebP" });
+
+  // Nama file baru tiap unggah, jadi link berubah dan cache gambar tidak basi.
+  const path = `${user.id}/${Date.now()}.${kind.ext}`;
+  const up = await supabase.storage.from(AVATAR_BUCKET).upload(path, bytes, {
+    contentType: kind.type,
+    upsert: false,
+  });
+  if (up.error) {
+    console.error("avatar upload", up.error);
+    return json(500, { error: "Foto gagal diunggah. Coba lagi." });
+  }
+  const url = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
+
+  const { data, error } = await supabase
+    .from("users")
+    .update({ avatar_url: url })
+    .eq("id", user.id)
+    .select()
+    .single();
+  if (error) {
+    await supabase.storage.from(AVATAR_BUCKET).remove([path]); // jangan tinggalkan file yatim
+    throw error;
+  }
+  const old = avatarPathFromUrl(user.avatar_url);
+  if (old && old !== path) await supabase.storage.from(AVATAR_BUCKET).remove([old]);
+  return json(200, { user: publicUser(data) });
+}
+
+// deno-lint-ignore no-explicit-any
+async function removeAvatar(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const { data, error } = await supabase
+    .from("users")
+    .update({ avatar_url: null })
+    .eq("id", user.id)
+    .select()
+    .single();
+  if (error) throw error;
+  const old = avatarPathFromUrl(user.avatar_url);
+  if (old) await supabase.storage.from(AVATAR_BUCKET).remove([old]);
   return json(200, { user: publicUser(data) });
 }
 
@@ -1007,6 +1103,10 @@ Deno.serve(async (req) => {
         return await profile(body);
       case "update_profile":
         return await updateProfile(body);
+      case "upload_avatar":
+        return await uploadAvatar(body);
+      case "remove_avatar":
+        return await removeAvatar(body);
       case "progress":
         return await progress(body);
       case "country_missions":
@@ -1029,8 +1129,6 @@ Deno.serve(async (req) => {
         return await feedbackSave(body);
       case "feedback_delete":
         return await feedbackDelete(body);
-      case "passport":
-        return await passport(body);
       case "logout": {
         const token = String(body.token ?? "");
         if (token) {

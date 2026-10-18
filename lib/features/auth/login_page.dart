@@ -14,7 +14,7 @@ import 'widgets/hero_illustration.dart';
 import 'widgets/login_overlays.dart';
 
 /// Halaman login: ilustrasi di atas, sheet putih naik dari bawah, isi form
-/// muncul bergantian. Login password + biometrik (sidik jari / wajah).
+/// muncul bergantian. Login password + sidik jari.
 /// Layar verifikasi biometrik dan "Berhasil masuk" tampil sebagai overlay
 /// di dalam sheet (sama dengan mockup).
 class LoginPage extends StatefulWidget {
@@ -100,19 +100,19 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  Future<void> _biometric(BiometricKind kind) async {
+  Future<void> _biometric() async {
     FocusScope.of(context).unfocus();
-    final result = await context.read<LoginController>().loginWithBiometric(kind);
+    final result = await context.read<LoginController>().loginWithBiometric();
     if (!mounted) return;
     switch (result) {
       case BiometricResult.success:
         _goHome();
       case BiometricResult.notAvailable:
-        _snack('Biometrik tidak tersedia di perangkat ini');
+        _snack('Sidik jari tidak tersedia di perangkat ini');
       case BiometricResult.noSession:
-        _snack('Masuk dengan password dulu (aktifkan "Ingat saya")');
+        _snack('Belum ada sesi tersimpan. Masuk dengan password dulu dan centang "Ingat saya"');
       case BiometricResult.failed:
-        _snack('Verifikasi biometrik gagal');
+        _snack('Verifikasi sidik jari gagal');
       case BiometricResult.cancelled:
         break;
     }
@@ -208,7 +208,6 @@ class _LoginPageState extends State<LoginPage>
             Positioned.fill(
               child: BiometricOverlay(
                 visible: ctrl.isBiometricBusy,
-                kind: ctrl.biometricKind,
                 onCancel: ctrl.cancelBiometric,
               ),
             ),
@@ -303,23 +302,6 @@ class _LoginPageState extends State<LoginPage>
               ),
               const SizedBox(width: 6),
               const Text('Ingat saya', style: TextStyle(fontSize: 13)),
-              const Spacer(),
-              TextButton(
-                style: TextButton.styleFrom(
-                  minimumSize: Size.zero,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => _snack('Fitur lupa password menyusul', error: false),
-                child: const Text(
-                  'Lupa password?',
-                  style: TextStyle(
-                    color: AppColors.teal,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -348,24 +330,13 @@ class _LoginPageState extends State<LoginPage>
         SizedBox(height: _g(14)),
         _in(
           7,
-          Row(
-            children: [
-              Expanded(
-                child: _BioButton(
-                  icon: Icons.fingerprint,
-                  label: 'Sidik jari',
-                  onPressed: busy ? null : () => _biometric(BiometricKind.fingerprint),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _BioButton(
-                  icon: Icons.face_outlined,
-                  label: 'Wajah',
-                  onPressed: busy ? null : () => _biometric(BiometricKind.face),
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: _BioButton(
+              icon: Icons.fingerprint,
+              label: 'Sidik jari',
+              onPressed: busy ? null : _biometric,
+            ),
           ),
         ),
         SizedBox(height: _g(12)),

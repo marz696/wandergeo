@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -250,9 +251,19 @@ class AuthRepository {
     return false;
   }
 
-  Future<void> logout() async {
-    final token = _session?.token ?? await _storage.readToken();
+  /// Keluar dari sesi yang sedang berjalan.
+  ///
+  /// Bila "Ingat saya" aktif (token tersimpan di Secure Storage), token itu
+  /// SENGAJA dibiarkan: login sidik jari memakainya untuk membuka sesi lagi
+  /// setelah logout, dan sidik jari tetap menjadi gerbangnya. Token juga tidak
+  /// dicabut di server, jadi masih berlaku sampai kedaluwarsa (30 hari).
+  /// Dengan [forgetDevice] = true, token dihapus dan dicabut di server (sidik
+  /// jari tidak bisa dipakai lagi sampai login dengan password).
+  Future<void> logout({bool forgetDevice = false}) async {
+    final stored = await _storage.readToken();
+    final token = _session?.token ?? stored;
     _session = null;
+    if (stored != null && !forgetDevice) return;
     await _storage.clear();
     if (token != null && !AppConfig.useMock) {
       await _call('logout', {'token': token}); // upaya terbaik, tidak melempar
@@ -265,6 +276,22 @@ class AuthRepository {
   /// Mengubah nama tampilan di tabel `users` (aksi `update_profile`).
   Future<ProfileResult> updateFullName(String fullName) =>
       _profileCall('update_profile', {'full_name': fullName});
+
+  /// Mengunggah foto profil ke Supabase Storage (aksi `upload_avatar`). Server
+  /// menyimpan link publiknya di `users.avatar_url`; user terbaru dikembalikan.
+  Future<ProfileResult> uploadAvatar(Uint8List bytes) {
+    if (AppConfig.useMock) return Future.value(_avatarNeedsServer);
+    return _profileCall('upload_avatar', {'image_base64': base64Encode(bytes)});
+  }
+
+  /// Menghapus foto profil (aksi `remove_avatar`): file di Storage dan link-nya.
+  Future<ProfileResult> removeAvatar() {
+    if (AppConfig.useMock) return Future.value(_avatarNeedsServer);
+    return _profileCall('remove_avatar', const {});
+  }
+
+  static const _avatarNeedsServer =
+      ProfileResult.failure('Foto profil membutuhkan koneksi ke server.');
 
   /// Progres tiap negara milik pengguna (aksi `progress`). Tabel
   /// `user_progress` terkunci dari Data API, jadi dibaca lewat Edge Function.
