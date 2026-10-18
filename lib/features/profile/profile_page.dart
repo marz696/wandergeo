@@ -253,7 +253,7 @@ class _ProfilePageState extends State<ProfilePage> {
         color: AppColors.teal,
         onRefresh: _refresh,
         child: ListView(
-          physics: const BouncingScrollPhysics(
+          physics: const ClampingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
           ),
           padding:

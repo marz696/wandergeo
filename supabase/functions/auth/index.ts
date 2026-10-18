@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_save, feedback_delete, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_all, feedback_save, feedback_delete, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -1011,7 +1011,19 @@ async function guideQuiz(b: any) {
 // Tabel `feedbacks` terkunci RLS dari Data API; semua akses lewat sini, dan
 // id user selalu diambil dari sesi, bukan dari body.
 // =====================================================
-const FEEDBACK_MIN = 5;
+// Pilihan chip. HARUS sama dengan `kFeedbackTags` di
+// lib/features/feedback/data/feedback_repository.dart.
+const FEEDBACK_TAGS = [
+  "Materi mudah dipahami",
+  "Seru banget",
+  "Dosen baik",
+  "Tugasnya susah",
+  "Tugasnya asik sekali",
+  "Perlu lebih banyak latihan",
+  "Perlu belajar lagi",
+];
+// false = daftar semua kesan menampilkan username; true = nama lengkap.
+const FEEDBACK_SHOW_REAL_NAME = false;
 const FEEDBACK_MAX = 1000;
 const FEEDBACK_COOLDOWN_MS = 20_000; // cegah kirim berulang tak sengaja
 
@@ -1021,7 +1033,7 @@ async function feedbackList(b: any) {
   if (!user) return json(401, { error: "Sesi tidak valid" });
   const { data, error } = await supabase
     .from("feedbacks")
-    .select("id, impression, suggestion, created_at")
+    .select("id, rating, tags, impression, suggestion, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -1029,18 +1041,60 @@ async function feedbackList(b: any) {
   return json(200, { items: data ?? [] });
 }
 
+// Semua kesan & pesan mata kuliah PAM Mobile, bisa dibaca semua user yang login.
+// Yang dikirim hanya data yang tampil di layar (tanpa email / user_id).
+// deno-lint-ignore no-explicit-any
+async function feedbackAll(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const byRating = String(b.sort ?? "latest") === "rating";
+  let q = supabase
+    .from("feedbacks")
+    .select(
+      "id, rating, tags, impression, suggestion, created_at, users(username, full_name, avatar_url)",
+      { count: "exact" },
+    );
+  q = byRating
+    ? q.order("rating", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+    : q.order("created_at", { ascending: false });
+  const { data, error, count } = await q.limit(100);
+  if (error) throw error;
+  // deno-lint-ignore no-explicit-any
+  const items = (data ?? []).map((r: any) => {
+    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+    const name = (FEEDBACK_SHOW_REAL_NAME ? u?.full_name : null) || u?.username || "Mahasiswa";
+    return {
+      id: r.id,
+      rating: r.rating,
+      tags: r.tags ?? [],
+      impression: r.impression,
+      suggestion: r.suggestion,
+      created_at: r.created_at,
+      name,
+      avatar_url: u?.avatar_url ?? null,
+    };
+  });
+  return json(200, { items, total: count ?? items.length });
+}
+
 // deno-lint-ignore no-explicit-any
 async function feedbackSave(b: any) {
   const user = await userFromToken(String(b.token ?? ""));
   if (!user) return json(401, { error: "Sesi tidak valid" });
 
-  const impression = String(b.impression ?? "").trim();
-  const suggestion = String(b.suggestion ?? "").trim();
-  if (impression.length < FEEDBACK_MIN) {
-    return json(400, { error: `Kesan minimal ${FEEDBACK_MIN} karakter` });
+  const rating = Number(b.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return json(400, { error: "Pilih dulu wajah yang paling mewakili kesanmu" });
   }
-  if (impression.length > FEEDBACK_MAX || suggestion.length > FEEDBACK_MAX) {
-    return json(400, { error: `Maksimal ${FEEDBACK_MAX} karakter per kolom` });
+  const tags = Array.isArray(b.tags) ? [...new Set(b.tags.map(String))] : [];
+  if (tags.length > FEEDBACK_TAGS.length || tags.some((t) => !FEEDBACK_TAGS.includes(t))) {
+    return json(400, { error: "Pilihan tidak valid" });
+  }
+  // Teks tambahan (opsional); disimpan di kolom `impression`.
+  const message = String(b.impression ?? "").trim();
+  if (message.length > FEEDBACK_MAX) {
+    return json(400, { error: `Maksimal ${FEEDBACK_MAX} karakter` });
   }
 
   const { data: last } = await supabase
@@ -1056,8 +1110,8 @@ async function feedbackSave(b: any) {
 
   const { data, error } = await supabase
     .from("feedbacks")
-    .insert({ user_id: user.id, impression, suggestion: suggestion || null })
-    .select("id, impression, suggestion, created_at")
+    .insert({ user_id: user.id, rating, tags, impression: message || null, suggestion: null })
+    .select("id, rating, tags, impression, suggestion, created_at")
     .single();
   if (error) throw error;
   return json(201, { item: data });
@@ -1125,6 +1179,8 @@ Deno.serve(async (req) => {
         return await guideQuiz(body);
       case "feedback_list":
         return await feedbackList(body);
+      case "feedback_all":
+        return await feedbackAll(body);
       case "feedback_save":
         return await feedbackSave(body);
       case "feedback_delete":
