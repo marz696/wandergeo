@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/data/coin_prices.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/geo_utils.dart';
@@ -29,7 +30,10 @@ class CountryCard extends StatelessWidget {
     final (statusText, statusColor) = switch (c.status) {
       CountryStatus.selesai => ('Selesai', AppColors.success),
       CountryStatus.terbuka => ('Terbuka · +75 koin', AppColors.goldDark),
-      CountryStatus.terkunci => ('Terkunci', AppColors.muted),
+      CountryStatus.terkunci => (
+          'Terkunci · Visa ${visaCostFor(c.difficulty)}',
+          AppColors.muted
+        ),
     };
     final sub = distanceKm == null
         ? c.capital

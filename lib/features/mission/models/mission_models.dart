@@ -37,6 +37,7 @@ class QuizQuestion {
     required this.options,
     required this.correct,
     required this.explanation,
+    this.hasHint = false,
   });
 
   final int id;
@@ -45,12 +46,39 @@ class QuizQuestion {
   final int correct; // indeks 0..3
   final String explanation;
 
+  /// Soal ini punya petunjuk (isinya hanya bisa diambil lewat pembelian).
+  final bool hasHint;
+
   factory QuizQuestion.fromJson(Map<String, dynamic> j) => QuizQuestion(
         id: (j['id'] as num).toInt(),
         text: j['text'] as String,
         options: [for (final o in j['options'] as List) o as String],
         correct: (j['correct'] as num).toInt(),
         explanation: (j['explanation'] as String?) ?? '',
+        hasHint: j['has_hint'] == true,
+      );
+}
+
+/// Hasil membeli petunjuk satu soal trivia.
+class HintResult {
+  const HintResult({
+    required this.hint,
+    required this.charged,
+    required this.coins,
+  });
+
+  final String hint;
+
+  /// false = petunjuk soal ini sudah dibeli sebelumnya, tanpa biaya lagi.
+  final bool charged;
+
+  /// Saldo koin setelah pembelian.
+  final int coins;
+
+  factory HintResult.fromJson(Map<String, dynamic> j) => HintResult(
+        hint: (j['hint'] as String?) ?? '',
+        charged: j['charged'] == true,
+        coins: (j['coins'] as num?)?.toInt() ?? 0,
       );
 }
 

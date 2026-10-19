@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/data/coin_prices.dart';
 import '../../../core/services/weather_service.dart';
 import '../../../core/services/wikipedia_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -21,6 +22,9 @@ class CountryDetailPanel extends StatelessWidget {
     required this.onStart,
     required this.onTools,
     required this.onClose,
+    required this.coins,
+    required this.onBuyVisa,
+    this.buyingVisa = false,
   });
 
   final Country country;
@@ -30,11 +34,22 @@ class CountryDetailPanel extends StatelessWidget {
   final VoidCallback onTools;
   final VoidCallback onClose;
 
+  /// Saldo koin pengguna, untuk menentukan apakah Visa Cepat terjangkau.
+  final int coins;
+
+  /// Dipanggil saat pengguna menekan "Buka Visa" pada negara terkunci.
+  final VoidCallback onBuyVisa;
+
+  /// true selama permintaan pembelian visa berjalan.
+  final bool buyingVisa;
+
   @override
   Widget build(BuildContext context) {
     final c = country;
     final locked = c.status == CountryStatus.terkunci;
     final done = c.status == CountryStatus.selesai;
+    final visaPrice = visaCostFor(c.difficulty);
+    final canAffordVisa = coins >= visaPrice;
     final (statusText, statusBg, statusFg) = switch (c.status) {
       CountryStatus.selesai => ('Selesai', AppColors.success, Colors.white),
       CountryStatus.terbuka => ('Terbuka', AppColors.gold, AppColors.ink),
@@ -180,10 +195,16 @@ class CountryDetailPanel extends StatelessWidget {
                   child: SizedBox(
                     height: 50,
                     child: FilledButton(
-                      onPressed: locked ? null : onStart,
+                      onPressed: locked
+                          ? (buyingVisa ? null : onBuyVisa)
+                          : onStart,
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: AppColors.ink,
+                        backgroundColor: locked
+                            ? (canAffordVisa ? AppColors.ink : AppColors.border)
+                            : AppColors.gold,
+                        foregroundColor: locked
+                            ? (canAffordVisa ? Colors.white : AppColors.muted)
+                            : AppColors.ink,
                         disabledBackgroundColor: AppColors.border,
                         disabledForegroundColor: AppColors.hint,
                         shape: RoundedRectangleBorder(
@@ -192,9 +213,31 @@ class CountryDetailPanel extends StatelessWidget {
                         textStyle: const TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 16),
                       ),
-                      child: Text(
-                        locked ? 'Terkunci' : (done ? 'Main Lagi' : 'Mulai Misi'),
-                      ),
+                      child: locked
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (buyingVisa)
+                                  const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                else
+                                  const Icon(Icons.airplane_ticket_rounded,
+                                      size: 20),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Buka Visa · $visaPrice koin',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(done ? 'Main Lagi' : 'Mulai Misi'),
                     ),
                   ),
                 ),
@@ -208,6 +251,18 @@ class CountryDetailPanel extends StatelessWidget {
                 ),
               ],
             ),
+            if (locked) ...[
+              const SizedBox(height: 8),
+              Text(
+                canAffordVisa
+                    ? 'Atau selesaikan negara lain agar ${c.name} terbuka gratis. '
+                        'Koinmu: $coins.'
+                    : 'Koinmu $coins, butuh $visaPrice. Kumpulkan koin dari misi, '
+                        'atau selesaikan negara lain agar terbuka gratis.',
+                style: const TextStyle(
+                    fontSize: 11.5, height: 1.35, color: AppColors.muted),
+              ),
+            ],
           ],
         ),
       ),

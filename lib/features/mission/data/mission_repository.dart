@@ -39,6 +39,15 @@ class MissionRepository {
     ];
   }
 
+  /// Membeli petunjuk satu soal trivia. Server memotong koin secara atomik;
+  /// bila petunjuk soal ini sudah dibeli pada percobaan yang sama, tanpa biaya.
+  Future<HintResult> hint(int questionId) async {
+    final d = await _call('trivia_hint', {'question_id': questionId});
+    final result = HintResult.fromJson(d);
+    await _auth.updateCoins(result.coins);
+    return result;
+  }
+
   /// [payload]: `{'answers': [...]}` (trivia), `{'studied': [id,...]}`
   /// (kuliner & budaya), atau `{'score': n}` (mini game).
   Future<MissionResult> submit(int missionId, Map<String, dynamic> payload) async {

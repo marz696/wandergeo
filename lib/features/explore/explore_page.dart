@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/data/coin_prices.dart';
 import '../../core/services/compass_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -14,6 +15,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/geo_utils.dart';
 import '../../core/widgets/round_icon_button.dart';
 import 'data/country_repository.dart';
+import 'data/visa_repository.dart';
 import '../auth/auth_repository.dart';
 import '../guide/guide_page.dart';
 import '../mission/mission_hub_page.dart';
@@ -90,6 +92,7 @@ class _ExplorePageState extends State<ExplorePage>
   final _repo = CountryRepository();
   List<Country> _countries = const [];
   bool _syncing = false;
+  bool _buyingVisa = false;
   bool _promptChecked = false;
 
   /// Koin dari akun (bertambah saat misi pertama kali diselesaikan).
@@ -279,6 +282,68 @@ class _ExplorePageState extends State<ExplorePage>
     _loadCountries(silent: true);
   }
 
+  void _toast(String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+        backgroundColor: AppColors.ink,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ));
+  }
+
+  /// Visa Cepat: buka negara terkunci dengan koin. Harga dan pemotongan koin
+  /// diputuskan server; setelah berhasil status negara dimuat ulang.
+  Future<void> _buyVisa(Country c) async {
+    final auth = context.read<AuthRepository>();
+    final price = visaCostFor(c.difficulty);
+    final coins = auth.currentUser?.coins ?? 0;
+    HapticFeedback.selectionClick();
+    if (coins < price) {
+      _toast('Koin belum cukup. Visa ${c.name} butuh $price koin, kamu punya $coins.');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Buka visa ${c.name}?'),
+        content: Text(
+          'Kamu membayar $price koin untuk membuka ${c.name} tanpa menyelesaikan '
+          'negara lain lebih dulu. Stempel paspor tetap baru didapat setelah '
+          'misi wajibnya selesai.\n\nSisa koin: ${coins - price}.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Buka Visa')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _buyingVisa = true);
+    try {
+      await VisaRepository(auth).buy(c.code);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      _toast('Visa ${c.name} aktif! Negara terbuka.');
+      setState(() {}); // saldo koin baru
+      _loadCountries(silent: true);
+    } on VisaException catch (e) {
+      if (!mounted) return;
+      _toast(e.message);
+      if (e.alreadyOpen) _loadCountries(silent: true);
+    } finally {
+      if (mounted) setState(() => _buyingVisa = false);
+    }
+  }
+
   void _openGuide() {
     HapticFeedback.selectionClick();
     Navigator.of(context).push(GuidePage.route(initialCountry: _selected));
@@ -451,6 +516,9 @@ class _ExplorePageState extends State<ExplorePage>
         onStart: () => _openMissions(selected),
         onTools: () => _openTools(currency: selected.currency),
         onClose: _closeSheet,
+        coins: context.read<AuthRepository>().currentUser?.coins ?? 0,
+        buyingVisa: _buyingVisa,
+        onBuyVisa: () => _buyVisa(selected),
       );
     } else if (_countries.isEmpty) {
       panel = const SizedBox(

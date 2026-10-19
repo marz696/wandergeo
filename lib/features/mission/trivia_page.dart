@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/data/coin_prices.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../auth/auth_repository.dart';
@@ -53,6 +54,10 @@ class _TriviaPageState extends State<TriviaPage>
   int _lastPts = 0;
   int _ptsKey = 0;
   final List<Map<String, dynamic>> _answers = [];
+
+  // Petunjuk yang dibeli pada percobaan ini: id soal -> isi petunjuk.
+  final Map<int, String> _hints = {};
+  bool _hintBusy = false;
 
   @override
   void initState() {
@@ -106,7 +111,9 @@ class _TriviaPageState extends State<TriviaPage>
       _streak++;
       _bestStreak = math.max(_bestStreak, _streak);
       _correct++;
-      final int speedBonus = math.min<int>(5, left ~/ 3);
+      // Soal yang dibantu petunjuk tidak mendapat bonus kecepatan (sama dengan server).
+      final int speedBonus =
+          _hints.containsKey(q.id) ? 0 : math.min<int>(5, left ~/ 3);
       final int streakBonus = math.min<int>(5, _streak - 1);
       pts = 10 + speedBonus + streakBonus;
       _score += pts;
@@ -315,6 +322,7 @@ class _TriviaPageState extends State<TriviaPage>
                         const SizedBox(height: 18),
                         _questionCard(q),
                         const SizedBox(height: 14),
+                        _hintArea(q),
                         for (var k = 0; k < q.options.length; k++)
                           _option(q, k),
                       ],
@@ -336,6 +344,121 @@ class _TriviaPageState extends State<TriviaPage>
       ],
     );
   }
+
+  void _toast(String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        backgroundColor: AppColors.ink,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ));
+  }
+
+  /// Beli petunjuk untuk soal aktif. Timer tetap berjalan selama permintaan.
+  Future<void> _buyHint(QuizQuestion q) async {
+    if (_locked || _hintBusy || _hints.containsKey(q.id)) return;
+    final coins = context.read<AuthRepository>().currentUser?.coins ?? 0;
+    if (coins < kHintCost) {
+      HapticFeedback.heavyImpact();
+      _toast(
+          'Koin belum cukup. Petunjuk butuh $kHintCost koin, kamu punya $coins.');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    setState(() => _hintBusy = true);
+    try {
+      final r = await _repo.hint(q.id);
+      if (!mounted) return;
+      setState(() => _hints[q.id] = r.hint);
+      if (!r.charged) {
+        _toast('Petunjuk ini sudah kamu beli sebelumnya, tanpa biaya.');
+      }
+    } on MissionException catch (e) {
+      if (mounted) _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _hintBusy = false);
+    }
+  }
+
+  Widget _hintArea(QuizQuestion q) {
+    final text = _hints[q.id];
+    if (text != null) return _hintCard(text);
+    if (!q.hasHint || _locked) return const SizedBox.shrink();
+    final coins = context.read<AuthRepository>().currentUser?.coins ?? 0;
+    final enough = coins >= kHintCost;
+    final tone = enough ? AppColors.teal : AppColors.hint;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: _hintBusy ? null : () => _buyHint(q),
+          icon: _hintBusy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.lightbulb_outline_rounded, size: 18, color: tone),
+          label: Text('Petunjuk · $kHintCost koin'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: tone,
+            side: BorderSide(color: enough ? AppColors.teal : AppColors.border),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            textStyle:
+                const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _hintCard(String text) => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: AppColors.sea,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 1),
+              child: Icon(Icons.lightbulb_rounded,
+                  size: 20, color: AppColors.teal),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 14,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Soal ini tidak mendapat bonus kecepatan.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _scoreChip() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

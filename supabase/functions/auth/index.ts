@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_all, feedback_save, feedback_delete, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, buy_visa, trivia_hint, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_all, feedback_save, feedback_delete, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -339,6 +339,11 @@ const PASS_RATIO = 0.6; // trivia lulus bila minimal 60% benar
 const GAME_TARGET = 100; // mini game selesai bila skor >= target
 const GAME_MAX = 400; // batas wajar skor mini game (dilaporkan klien)
 
+// Ekonomi koin. Nilai ini HARUS sama dengan konstanta di aplikasi
+// (kVisaBaseCost dan kHintCost di lib/core/data/coin_prices.dart).
+const VISA_BASE = 50; // harga Visa Cepat = VISA_BASE x tingkat kesulitan negara
+const HINT_COST = 3; // harga satu petunjuk trivia
+
 const toRad = (d: number) => (d * Math.PI) / 180;
 // deno-lint-ignore no-explicit-any
 function distanceKm(a: any, b: any): number {
@@ -422,7 +427,7 @@ async function missionContent(b: any) {
   if (m.type === "trivia") {
     const { data, error } = await supabase
       .from("quiz_questions")
-      .select("id, question, option_a, option_b, option_c, option_d, correct_option, explanation")
+      .select("id, question, option_a, option_b, option_c, option_d, correct_option, explanation, hint")
       .eq("mission_id", m.id);
     if (error) throw error;
     const qs = [...(data ?? [])];
@@ -440,7 +445,10 @@ async function missionContent(b: any) {
         options: [q.option_a, q.option_b, q.option_c, q.option_d],
         correct: "ABCD".indexOf(q.correct_option),
         explanation: q.explanation ?? "",
+        // Teks petunjuk hanya diberikan lewat action `trivia_hint` (berbayar).
+        has_hint: !!String(q.hint ?? "").trim(),
       })),
+      hint_cost: HINT_COST,
     });
   }
   if (m.type === "kuliner_budaya") {
@@ -508,6 +516,14 @@ async function submitMission(b: any) {
     // deno-lint-ignore no-explicit-any
     const key = new Map((qs ?? []).map((q: any) => [q.id, "ABCD".indexOf(q.correct_option)]));
     total = key.size;
+    // Soal yang petunjuknya dibeli pada percobaan ini tidak mendapat bonus kecepatan.
+    const { data: hs } = await supabase
+      .from("trivia_hints")
+      .select("question_id")
+      .eq("user_id", user.id)
+      .in("question_id", [...key.keys()]);
+    // deno-lint-ignore no-explicit-any
+    const hinted = new Set((hs ?? []).map((h: any) => Number(h.question_id)));
     const answers = Array.isArray(b.answers) ? b.answers : [];
     const seen = new Set<number>();
     let streak = 0;
@@ -519,13 +535,16 @@ async function submitMission(b: any) {
       if (Number(a?.choice) === key.get(qid)) {
         correct++;
         streak++;
-        score += 10 + Math.min(5, Math.floor(timeLeft / 3)) + Math.min(5, streak - 1);
+        const speedBonus = hinted.has(qid) ? 0 : Math.min(5, Math.floor(timeLeft / 3));
+        score += 10 + speedBonus + Math.min(5, streak - 1);
       } else {
         streak = 0;
       }
     }
     if (total === 0 || seen.size !== total) return json(400, { error: "Jawaban tidak lengkap" });
     passed = correct / total >= PASS_RATIO;
+    // Petunjuk berlaku untuk satu percobaan: dipakai habis saat jawaban dikirim.
+    await supabase.from("trivia_hints").delete().eq("user_id", user.id).in("question_id", [...key.keys()]);
   } else if (m.type === "kuliner_budaya") {
     const { data: cards } = await supabase.from("culture_cards").select("id").eq("mission_id", m.id);
     const studied = new Set((Array.isArray(b.studied) ? b.studied : []).map(Number));
@@ -564,8 +583,9 @@ async function submitMission(b: any) {
   let coinsEarned = 0;
   if (firstCompletion) {
     coinsEarned = m.reward_coins;
-    coins += coinsEarned;
-    await supabase.from("users").update({ coins }).eq("id", user.id);
+    const added = await supabase.rpc("add_coins", { p_user: user.id, p_amount: coinsEarned });
+    if (added.error) throw added.error;
+    coins = Number(added.data ?? coins + coinsEarned);
   }
 
   // Negara selesai bila trivia DAN kuliner & budaya sudah lulus (mini game opsional).
@@ -623,6 +643,81 @@ async function submitMission(b: any) {
     country_completed: justCompleted,
     unlocked,
     stamp,
+  });
+}
+
+// =====================================================
+// KOIN: Visa Cepat dan Petunjuk Trivia
+// Pemotongan koin dikerjakan atomik di database (fungsi buy_visa / buy_hint
+// pada 008_koin_visa_hint.sql), bukan baca-lalu-tulis di sini.
+// =====================================================
+
+// Buka satu negara terkunci dengan koin. Negara yang dibuka berstatus "terbuka":
+// stempel paspor tetap baru didapat setelah misi wajibnya selesai.
+// deno-lint-ignore no-explicit-any
+async function buyVisa(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const code = String(b.country_code ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return json(400, { error: "Kode negara tidak valid" });
+
+  const { data, error } = await supabase.rpc("buy_visa", {
+    p_user: user.id,
+    p_code: code,
+    p_base: VISA_BASE,
+  });
+  if (error) throw error;
+  if (data?.error === "country") return json(404, { error: "Negara tidak ditemukan" });
+  if (data?.error === "already") return json(409, { error: "Negara ini sudah terbuka", coins: data.coins });
+  if (data?.error === "coins") {
+    return json(402, { error: "Koin tidak cukup", coins: data.coins, price: data.price });
+  }
+  if (!data?.ok) return json(400, { error: "Visa tidak dapat dibeli" });
+  return json(200, {
+    country: { code, status: "terbuka" },
+    coins: Number(data.coins),
+    price: Number(data.price),
+  });
+}
+
+// Petunjuk satu soal trivia (kolom quiz_questions.hint). Jika petunjuk soal itu
+// sudah dibeli pada percobaan ini, isinya dikembalikan tanpa memotong koin lagi.
+// deno-lint-ignore no-explicit-any
+async function triviaHint(b: any) {
+  const user = await userFromToken(String(b.token ?? ""));
+  if (!user) return json(401, { error: "Sesi tidak valid" });
+  const qid = Number(b.question_id);
+  if (!Number.isInteger(qid)) return json(400, { error: "Soal tidak valid" });
+
+  const { data: q } = await supabase
+    .from("quiz_questions")
+    .select("id, mission_id, hint")
+    .eq("id", qid)
+    .maybeSingle();
+  if (!q) return json(404, { error: "Soal tidak ditemukan" });
+  const m = await loadMission(q.mission_id);
+  if (!m || m.type !== "trivia") return json(404, { error: "Soal tidak ditemukan" });
+  if (!(await countryUnlocked(user.id, m.country_code))) {
+    return json(403, { error: "Negara ini masih terkunci" });
+  }
+  const hint = String(q.hint ?? "").trim();
+  if (!hint) return json(404, { error: "Petunjuk belum tersedia untuk soal ini" });
+
+  const { data, error } = await supabase.rpc("buy_hint", {
+    p_user: user.id,
+    p_question: qid,
+    p_price: HINT_COST,
+  });
+  if (error) throw error;
+  if (data?.error === "coins") {
+    return json(402, { error: "Koin tidak cukup", coins: data.coins, price: HINT_COST });
+  }
+  if (!data?.ok) return json(400, { error: "Petunjuk tidak dapat dibeli" });
+  return json(200, {
+    hint,
+    charged: !!data.charged,
+    price: HINT_COST,
+    coins: Number(data.coins),
   });
 }
 
@@ -1169,6 +1264,10 @@ Deno.serve(async (req) => {
         return await missionContent(body);
       case "submit_mission":
         return await submitMission(body);
+      case "buy_visa":
+        return await buyVisa(body);
+      case "trivia_hint":
+        return await triviaHint(body);
       case "passport":
         return await passport(body);
       case "guide_quota":
