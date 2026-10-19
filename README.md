@@ -324,5 +324,6 @@ Negara dengan tingkat kesulitan 1 terbuka sejak awal. Menyelesaikan semua misi w
 
 ## Pembuat
 
-**[Nama Mahasiswa]** — [NIM] — [Program Studi], [Universitas]
+**Damar Nugroho** - 124240073
+**Azhicry Vernando Etsria Putra** - 124240069
 Dosen pengampu: [Nama Dosen]
