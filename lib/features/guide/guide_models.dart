@@ -1,6 +1,7 @@
 enum GuideRole { user, guide }
 
-enum GuideErrorKind { network, quota, other }
+/// timeout = server tidak menjawab tepat waktu (kuota mungkin sudah terpotong).
+enum GuideErrorKind { network, timeout, quota, other }
 
 class GuideQuiz {
   const GuideQuiz({

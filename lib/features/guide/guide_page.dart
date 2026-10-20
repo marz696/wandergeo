@@ -174,6 +174,13 @@ class _GuidePageState extends State<GuidePage> with SingleTickerProviderStateMix
             _banner = _Banner.offline;
             _pending = text;
             _pendingQuiz = quiz;
+          case GuideErrorKind.timeout:
+            _msgs.add(GuideMessage(
+              role: GuideRole.guide,
+              text: 'Pemandu terlalu lama menjawab, jadi permintaan dihentikan. '
+                  'Coba kirim ulang. Sisa pertanyaan di atas sudah diperbarui.',
+              isError: true,
+            ));
           case GuideErrorKind.quota:
             _banner = _Banner.quota;
             _remaining = 0;
@@ -181,8 +188,20 @@ class _GuidePageState extends State<GuidePage> with SingleTickerProviderStateMix
             _msgs.add(GuideMessage(role: GuideRole.guide, text: e.message, isError: true));
         }
       });
+      // Server mungkin sudah memotong kuota sebelum jawaban gagal sampai;
+      // ambil angka sebenarnya agar tampilan sisa pertanyaan tidak basi.
+      if (e.kind != GuideErrorKind.quota) _syncQuota();
     }
     _scrollEnd();
+  }
+
+  Future<void> _syncQuota() async {
+    final q = await _repo.quota();
+    if (!mounted || q == null) return;
+    setState(() {
+      _remaining = q;
+      if (q == 0) _banner = _Banner.quota;
+    });
   }
 
   Future<void> _switchCountry(String code) async {

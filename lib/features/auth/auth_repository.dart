@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -79,6 +80,15 @@ class AuthResult {
   final String? message;
 }
 
+/// Hasil permintaan kode reset / penggantian password.
+class ResetResult {
+  const ResetResult.success([this.message]) : ok = true;
+  const ResetResult.failure(this.message) : ok = false;
+
+  final bool ok;
+  final String? message;
+}
+
 /// Ringkasan progres paspor milik satu pengguna (dari tabel `user_progress`).
 class ProfileStats {
   const ProfileStats({
@@ -130,26 +140,34 @@ class ProfileResult {
 
 /// Hasil pemanggilan Edge Function untuk fitur lain (misi, dll).
 class ApiResponse {
-  const ApiResponse(this.status, this.data);
+  const ApiResponse(this.status, this.data, {this.timedOut = false});
 
   final int status; // 0 = gagal terhubung
   final Map<String, dynamic>? data;
+
+  /// true bila server tidak menjawab dalam batas waktu. Tetap dihitung sebagai
+  /// [networkError] (status 0), tetapi pesannya berbeda: server mungkin masih
+  /// memproses permintaan itu.
+  final bool timedOut;
 
   bool get ok => status >= 200 && status < 300;
   bool get networkError => status == 0;
 
   String get message =>
       (data?['error'] as String?) ??
-      (networkError
+      (timedOut
+          ? 'Server terlalu lama merespons. Coba lagi sebentar lagi.'
+          : networkError
           ? 'Tidak dapat terhubung ke server. Periksa internet lalu coba lagi.'
           : 'Terjadi kesalahan (kode $status).');
 }
 
 class _Resp {
-  const _Resp(this.status, this.data);
+  const _Resp(this.status, this.data, {this.timedOut = false});
 
   final int status; // 0 = gagal terhubung
   final Map<String, dynamic>? data;
+  final bool timedOut;
 
   bool get networkError => status == 0;
 }
@@ -212,6 +230,51 @@ class AuthRepository {
     });
     return _handle(r, true);
   }
+
+  /// Meminta kode verifikasi reset password ke email akun. Server selalu
+  /// menjawab sukses (tidak membocorkan apakah akun terdaftar), jadi pesan
+  /// di layar bersifat umum.
+  Future<ResetResult> requestPasswordReset(String identifier) async {
+    if (AppConfig.useMock) {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      return const ResetResult.success('Mode mock: gunakan kode 123456.');
+    }
+    if (!AppConfig.isConfigured) return const ResetResult.failure(_notConfigured);
+    final r = await _call('forgot_request', {'identifier': identifier});
+    if (r.status == 200) {
+      return ResetResult.success(r.data?['message'] as String?);
+    }
+    return ResetResult.failure(_resetError(r));
+  }
+
+  /// Menukar kode verifikasi dengan password baru. Setelah berhasil, semua
+  /// sesi lama dicabut di server; pengguna harus masuk lagi.
+  Future<ResetResult> resetPassword({
+    required String identifier,
+    required String code,
+    required String newPassword,
+  }) async {
+    if (AppConfig.useMock) {
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      return code == '123456'
+          ? const ResetResult.success('Password berhasil diubah (mode mock).')
+          : const ResetResult.failure('Kode salah. Di mode mock gunakan 123456.');
+    }
+    if (!AppConfig.isConfigured) return const ResetResult.failure(_notConfigured);
+    final r = await _call('forgot_reset', {
+      'identifier': identifier,
+      'code': code,
+      'new_password': newPassword,
+    });
+    if (r.status == 200) {
+      return ResetResult.success(r.data?['message'] as String?);
+    }
+    return ResetResult.failure(_resetError(r));
+  }
+
+  String _resetError(_Resp r) => r.networkError
+      ? 'Tidak dapat terhubung ke server. Periksa internet lalu coba lagi.'
+      : (r.data?['error'] as String?) ?? 'Terjadi kesalahan (kode ${r.status}).';
 
   /// Dipakai login biometrik: true bila ada sesi tersimpan yang masih berlaku.
   /// Bila server tidak terjangkau, sesi tersimpan tetap dipercaya (mode offline).
@@ -311,7 +374,14 @@ class AuthRepository {
   }
 
   /// Memanggil aksi Edge Function dengan token sesi yang sedang aktif.
-  Future<ApiResponse> authed(String action, Map<String, dynamic> body) async {
+  ///
+  /// [timeout] membatasi lama menunggu jawaban; fitur yang memanggil layanan
+  /// lambat (Pemandu AI) memberi batas lebih panjang dari bawaan 20 detik.
+  Future<ApiResponse> authed(
+    String action,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
     final sess = _session;
     if (sess == null) {
       return const ApiResponse(401, {'error': 'Sesi berakhir. Silakan masuk lagi.'});
@@ -320,8 +390,8 @@ class AuthRepository {
       return const ApiResponse(
           0, {'error': 'Fitur ini membutuhkan koneksi ke server.'});
     }
-    final r = await _call(action, {...body, 'token': sess.token});
-    return ApiResponse(r.status, r.data);
+    final r = await _call(action, {...body, 'token': sess.token}, timeout: timeout);
+    return ApiResponse(r.status, r.data, timedOut: r.timedOut);
   }
 
   /// Memperbarui jumlah koin setelah misi selesai (memori + penyimpanan aman).
@@ -451,7 +521,11 @@ class AuthRepository {
     return AuthResult.success(s);
   }
 
-  Future<_Resp> _call(String action, Map<String, dynamic> body) async {
+  Future<_Resp> _call(
+    String action,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
     try {
       final key = AppConfig.supabaseAnonKey;
       final res = await http
@@ -465,13 +539,15 @@ class AuthRepository {
             },
             body: jsonEncode({'action': action, ...body}),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(timeout);
       Map<String, dynamic>? data;
       try {
         final decoded = jsonDecode(res.body);
         if (decoded is Map<String, dynamic>) data = decoded;
       } catch (_) {}
       return _Resp(res.statusCode, data);
+    } on TimeoutException {
+      return const _Resp(0, null, timedOut: true);
     } catch (_) {
       return const _Resp(0, null);
     }

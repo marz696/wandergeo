@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../routes.dart';
+import 'forgot_password_page.dart';
 import 'login_controller.dart';
 import 'register_page.dart';
 import 'widgets/hero_illustration.dart';
@@ -302,6 +303,24 @@ class _LoginPageState extends State<LoginPage>
               ),
               const SizedBox(width: 6),
               const Text('Ingat saya', style: TextStyle(fontSize: 13)),
+              const Spacer(),
+              TextButton(
+                onPressed: ctrl.isLoading
+                    ? null
+                    : () => Navigator.of(context).push(
+                          ForgotPasswordPage.route(
+                              initialIdentifier: _idCtrl.text.trim()),
+                        ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.teal,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+                child: const Text('Lupa password?'),
+              ),
             ],
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 
@@ -15,6 +16,7 @@ class AppTextField extends StatelessWidget {
     this.textInputAction,
     this.onSubmitted,
     this.autofillHints,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -27,6 +29,7 @@ class AppTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
   final Iterable<String>? autofillHints;
+  final List<TextInputFormatter>? inputFormatters;
 
   OutlineInputBorder _border(Color color, [double width = 1]) =>
       OutlineInputBorder(
@@ -44,6 +47,7 @@ class AppTextField extends StatelessWidget {
       textInputAction: textInputAction,
       onFieldSubmitted: onSubmitted,
       autofillHints: autofillHints,
+      inputFormatters: inputFormatters,
       style: const TextStyle(fontSize: 15, color: AppColors.ink),
       decoration: InputDecoration(
         hintText: hint,

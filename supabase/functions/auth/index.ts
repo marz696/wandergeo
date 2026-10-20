@@ -1,4 +1,4 @@
-// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, buy_visa, trivia_hint, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_all, feedback_save, feedback_delete, logout.
+// Edge Function `auth`: register, login, me, profile, update_profile, upload_avatar, remove_avatar, progress, country_missions, mission_content, submit_mission, buy_visa, trivia_hint, forgot_request, forgot_reset, guide_quota, guide_chat, guide_quiz, passport, feedback_list, feedback_all, feedback_save, feedback_delete, logout.
 // Autentikasi mandiri (tanpa Supabase Auth): password di-hash bcrypt, sesi
 // berupa token acak yang hanya disimpan sebagai hash SHA-256 di tabel `sessions`.
 //
@@ -171,6 +171,183 @@ async function userFromToken(token: string) {
   const row = data as any;
   if (!row || new Date(row.expires_at) < new Date()) return null;
   return row.users;
+}
+
+// =====================================================
+// LUPA PASSWORD: kode verifikasi 6 digit lewat email
+//   forgot_request -> kirim kode ke email akun (selalu menjawab sukses agar
+//                     tidak membocorkan apakah akun ada)
+//   forgot_reset   -> tukar kode + password baru; semua sesi lama dicabut
+// Pengiriman email lewat Brevo (REST API v3). Variabel lingkungan:
+//   BREVO_API_KEY, MAIL_FROM_EMAIL (pengirim terverifikasi di Brevo),
+//   MAIL_FROM_NAME (opsional), RESET_PEPPER (opsional, rahasia tambahan hash).
+// Bila BREVO_API_KEY/MAIL_FROM_EMAIL belum diisi, kode hanya dicetak ke log
+// fungsi (untuk uji coba); JANGAN dipakai begitu di produksi.
+// =====================================================
+const RESET_MINUTES = 15; // masa berlaku kode
+const RESET_COOLDOWN_SEC = 60; // jeda minimum antar permintaan kode
+const RESET_MAX_ATTEMPTS = 5; // salah memasukkan kode lebih dari ini = kode hangus
+const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
+const MAIL_FROM_EMAIL = Deno.env.get("MAIL_FROM_EMAIL") ?? "";
+const MAIL_FROM_NAME = Deno.env.get("MAIL_FROM_NAME") ?? "WanderGeo";
+const RESET_PEPPER = Deno.env.get("RESET_PEPPER") ?? "";
+const RESET_GENERIC_MSG = "Jika akun terdaftar, kode verifikasi telah dikirim ke email akun tersebut.";
+const RESET_BAD_CODE = "Kode salah atau sudah kedaluwarsa. Minta kode baru bila perlu.";
+
+function resetCode(): string {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0];
+  return String(n % 1_000_000).padStart(6, "0");
+}
+
+const resetHash = (userId: string, code: string) => sha256(`${userId}:${code}:${RESET_PEPPER}`);
+
+// Perbandingan string dengan waktu tetap (hindari kebocoran lewat waktu respons).
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+async function sendResetEmail(to: string, name: string, code: string): Promise<boolean> {
+  if (!BREVO_API_KEY || !MAIL_FROM_EMAIL) {
+    console.log(`[UJI COBA] Email belum dikonfigurasi. Kode reset untuk ${to}: ${code}`);
+    return false;
+  }
+  const safeName = escapeHtml(name);
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": BREVO_API_KEY, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({
+      sender: { name: MAIL_FROM_NAME, email: MAIL_FROM_EMAIL },
+      to: [{ email: to, name }],
+      subject: "Kode reset password WanderGeo",
+      textContent:
+        `Halo ${name},\n\nKode reset password WanderGeo kamu: ${code}\n` +
+        `Kode berlaku ${RESET_MINUTES} menit. Jika bukan kamu yang memintanya, abaikan email ini.`,
+      htmlContent:
+        `<div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;color:#0B2A3C">` +
+        `<h2 style="margin:0 0 8px">Reset password WanderGeo</h2>` +
+        `<p>Halo ${safeName}, gunakan kode berikut untuk membuat password baru:</p>` +
+        `<p style="font-size:32px;letter-spacing:8px;font-weight:bold;margin:16px 0">${code}</p>` +
+        `<p>Kode berlaku <b>${RESET_MINUTES} menit</b>. Jangan bagikan kode ini kepada siapa pun.</p>` +
+        `<p style="color:#6B7C88;font-size:13px">Jika bukan kamu yang memintanya, abaikan email ini; passwordmu tidak berubah.</p></div>`,
+    }),
+  });
+  if (!res.ok) {
+    console.error("brevo", res.status, await res.text());
+    return false;
+  }
+  return true;
+}
+
+// deno-lint-ignore no-explicit-any
+async function forgotRequest(b: any) {
+  const identifier = String(b.identifier ?? "").trim().toLowerCase();
+  if (!identifier || identifier.length > 120) {
+    return json(400, { error: "Isi email atau username" });
+  }
+  const generic = () =>
+    json(200, {
+      ok: true,
+      message: RESET_GENERIC_MSG,
+      expires_minutes: RESET_MINUTES,
+      cooldown_seconds: RESET_COOLDOWN_SEC,
+    });
+
+  const column = identifier.includes("@") ? "email" : "username";
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, email, full_name, username")
+    .eq(column, identifier)
+    .maybeSingle();
+  if (error) throw error;
+  if (!user) return generic();
+
+  // Jeda antar permintaan: cegah pengiriman email berulang ke korban.
+  const { data: existing } = await supabase
+    .from("password_resets")
+    .select("created_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existing && Date.now() - new Date(existing.created_at).getTime() < RESET_COOLDOWN_SEC * 1000) {
+    return generic();
+  }
+
+  const code = resetCode();
+  const up = await supabase.from("password_resets").upsert({
+    user_id: user.id,
+    code_hash: await resetHash(user.id, code),
+    expires_at: new Date(Date.now() + RESET_MINUTES * 60_000).toISOString(),
+    attempts: 0,
+    created_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (up.error) throw up.error;
+
+  try {
+    await sendResetEmail(user.email, user.full_name || user.username, code);
+  } catch (e) {
+    console.error("kirim email reset", e);
+  }
+  return generic();
+}
+
+// deno-lint-ignore no-explicit-any
+async function forgotReset(b: any) {
+  const identifier = String(b.identifier ?? "").trim().toLowerCase();
+  const code = String(b.code ?? "").trim();
+  const password = String(b.new_password ?? "");
+  if (!identifier || !/^\d{6}$/.test(code)) return json(400, { error: "Masukkan kode 6 digit dari email" });
+  const pwBytes = new TextEncoder().encode(password).length;
+  if (pwBytes < 8 || pwBytes > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    return json(400, { error: "Password 8-72 karakter dan mengandung huruf serta angka" });
+  }
+  const bad = () => json(400, { error: RESET_BAD_CODE });
+
+  const column = identifier.includes("@") ? "email" : "username";
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id")
+    .eq(column, identifier)
+    .maybeSingle();
+  if (error) throw error;
+  if (!user) {
+    await resetHash("-", code); // samakan kerja dengan jalur akun yang ada
+    return bad();
+  }
+
+  const { data: row } = await supabase
+    .from("password_resets")
+    .select("code_hash, expires_at, attempts")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!row || new Date(row.expires_at) < new Date() || row.attempts >= RESET_MAX_ATTEMPTS) {
+    if (row) await supabase.from("password_resets").delete().eq("user_id", user.id);
+    return bad();
+  }
+
+  if (!safeEqual(row.code_hash, await resetHash(user.id, code))) {
+    const attempts = row.attempts + 1;
+    if (attempts >= RESET_MAX_ATTEMPTS) {
+      await supabase.from("password_resets").delete().eq("user_id", user.id);
+    } else {
+      await supabase.from("password_resets").update({ attempts }).eq("user_id", user.id);
+    }
+    return bad();
+  }
+
+  // Kode benar: ganti password, buka kunci akun, cabut semua sesi lama.
+  const upd = await supabase
+    .from("users")
+    .update({ password_hash: bcrypt.hashSync(password, 10), failed_attempts: 0, locked_until: null })
+    .eq("id", user.id);
+  if (upd.error) throw upd.error;
+  await supabase.from("sessions").delete().eq("user_id", user.id);
+  await supabase.from("password_resets").delete().eq("user_id", user.id);
+  return json(200, { ok: true, message: "Password berhasil diubah. Silakan masuk dengan password baru." });
 }
 
 // Data profil: akun + ringkasan progres paspor dari tabel `user_progress`.
@@ -875,6 +1052,10 @@ const GEMINI_MODELS = (Deno.env.get("GEMINI_MODEL") ?? "gemini-3.8-flash,gemini-
   .split(",").map((m) => m.trim()).filter(Boolean);
 const GEMINI_BASE = Deno.env.get("GEMINI_BASE_URL") ?? "https://generativelanguage.googleapis.com/v1beta";
 const GUIDE_LIMIT = Number(Deno.env.get("GUIDE_DAILY_LIMIT") ?? "10");
+// Batas tunggu per percobaan model. Server mencoba model cadangan bila gagal,
+// jadi total terburuk = jumlah model x batas ini (default 2 x 20 dtk = 40 dtk),
+// harus lebih kecil dari batas tunggu aplikasi untuk fitur AI (60 dtk).
+const GEMINI_TIMEOUT_MS = Number(Deno.env.get("GEMINI_TIMEOUT_MS") ?? "20000");
 
 class GuideError extends Error {
   constructor(public status: number, message: string) {
@@ -921,15 +1102,16 @@ async function callGemini(body: any): Promise<string> {
   let lastStatus = 0;
   for (const model of GEMINI_MODELS) {
     let res: Response;
+    const t0 = Date.now();
     try {
       res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
       });
     } catch (e) {
-      console.error("gemini fetch", model, e);
+      console.error("gemini fetch", model, `${Date.now() - t0}ms`, e);
       lastStatus = 504;
       continue;
     }
@@ -944,6 +1126,7 @@ async function callGemini(body: any): Promise<string> {
       throw new GuideError(502, "Layanan AI menolak permintaan ini.");
     }
     const data = await res.json();
+    console.log("gemini ok", model, `${Date.now() - t0}ms`); // bahan diagnosis latensi
     const parts = data?.candidates?.[0]?.content?.parts ?? [];
     // deno-lint-ignore no-explicit-any
     const text = parts.map((p: any) => p?.text ?? "").join("").trim();
@@ -1264,6 +1447,10 @@ Deno.serve(async (req) => {
         return await missionContent(body);
       case "submit_mission":
         return await submitMission(body);
+      case "forgot_request":
+        return await forgotRequest(body);
+      case "forgot_reset":
+        return await forgotReset(body);
       case "buy_visa":
         return await buyVisa(body);
       case "trivia_hint":

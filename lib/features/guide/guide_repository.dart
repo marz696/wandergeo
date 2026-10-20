@@ -10,15 +10,28 @@ class GuideRepository {
 
   final AuthRepository _auth;
 
+  /// Gemini bisa butuh beberapa detik (server mencoba maksimal dua model, masing-
+  /// masing sampai 20 detik), jadi batas tunggu jauh di atas bawaan 20 detik.
+  /// Bila sama dengan bawaan, aplikasi menyerah sebelum server selesai: muncul
+  /// "tidak ada koneksi" padahal server masih memproses dan kuota sudah terpotong.
+  static const _aiTimeout = Duration(seconds: 60);
+
   Future<Map<String, dynamic>> _call(
-      String action, Map<String, dynamic> body) async {
-    final r = await _auth.authed(action, body);
+    String action,
+    Map<String, dynamic> body, {
+    Duration? timeout,
+  }) async {
+    final r = timeout == null
+        ? await _auth.authed(action, body)
+        : await _auth.authed(action, body, timeout: timeout);
     if (r.ok && r.data != null) return r.data!;
-    final kind = r.networkError
-        ? GuideErrorKind.network
-        : (r.status == 429 && r.data?['remaining'] == 0
-            ? GuideErrorKind.quota
-            : GuideErrorKind.other);
+    final kind = r.timedOut
+        ? GuideErrorKind.timeout
+        : r.networkError
+            ? GuideErrorKind.network
+            : (r.status == 429 && r.data?['remaining'] == 0
+                ? GuideErrorKind.quota
+                : GuideErrorKind.other);
     throw GuideException(r.message, kind);
   }
 
@@ -39,19 +52,27 @@ class GuideRepository {
   }) async {
     final plain = history.where((m) => !m.isError && m.quiz == null).toList();
     final tail = plain.length > 6 ? plain.sublist(plain.length - 6) : plain;
-    final d = await _call('guide_chat', {
-      'country_code': countryCode,
-      'message': message,
-      'history': [
-        for (final m in tail)
-          {'role': m.role == GuideRole.user ? 'user' : 'model', 'text': m.text},
-      ],
-    });
+    final d = await _call(
+      'guide_chat',
+      {
+        'country_code': countryCode,
+        'message': message,
+        'history': [
+          for (final m in tail)
+            {'role': m.role == GuideRole.user ? 'user' : 'model', 'text': m.text},
+        ],
+      },
+      timeout: _aiTimeout,
+    );
     return (reply: d['reply'] as String, remaining: (d['remaining'] as num).toInt());
   }
 
   Future<({GuideQuiz quiz, int remaining})> quiz(String countryCode) async {
-    final d = await _call('guide_quiz', {'country_code': countryCode});
+    final d = await _call(
+      'guide_quiz',
+      {'country_code': countryCode},
+      timeout: _aiTimeout,
+    );
     return (
       quiz: GuideQuiz.fromJson(d),
       remaining: (d['remaining'] as num).toInt(),
