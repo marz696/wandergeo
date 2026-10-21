@@ -4,8 +4,10 @@ import '../../core/services/currency_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/round_icon_button.dart';
+import '../translate/widgets/translate_entry_tile.dart';
 import 'widgets/currency_card.dart';
 import 'widgets/world_time_card.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Alat Perjalanan: konversi mata uang (kurs online + cache SQLite)
 /// dan konversi waktu WIB / WITA / WIT / London.
@@ -18,9 +20,11 @@ class AlatPerjalananPage extends StatefulWidget {
   static Route<void> route({String? currency}) => PageRouteBuilder<void>(
         transitionDuration: const Duration(milliseconds: 380),
         reverseTransitionDuration: const Duration(milliseconds: 280),
-        pageBuilder: (_, __, ___) => AlatPerjalananPage(initialCurrency: currency),
+        pageBuilder: (_, __, ___) =>
+            AlatPerjalananPage(initialCurrency: currency),
         transitionsBuilder: (_, anim, __, child) {
-          final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+          final curved =
+              CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
           return FadeTransition(
             opacity: curved,
             child: SlideTransition(
@@ -45,11 +49,11 @@ class _AlatPerjalananPageState extends State<AlatPerjalananPage>
     duration: const Duration(milliseconds: 1000),
   )..forward();
 
-  late final List<Animation<double>> _stag = List.generate(3, (i) {
-    final start = i * .18;
+  late final List<Animation<double>> _stag = List.generate(4, (i) {
+    final start = i * .15;
     return CurvedAnimation(
       parent: _enter,
-      curve: Interval(start, start + .55, curve: Curves.easeOutCubic),
+      curve: Interval(start, start + .5, curve: Curves.easeOutCubic),
     );
   });
 
@@ -115,7 +119,7 @@ class _AlatPerjalananPageState extends State<AlatPerjalananPage>
                         children: [
                           Text('Alat Perjalanan', style: AppTheme.heading(24)),
                           const Text(
-                            'Kurs mata uang dan waktu dunia',
+                            'Kurs, waktu dunia, dan terjemah kamera',
                             style: TextStyle(
                                 fontSize: 12.5, color: AppColors.muted),
                           ),
@@ -137,6 +141,10 @@ class _AlatPerjalananPageState extends State<AlatPerjalananPage>
               ),
               const SizedBox(height: 14),
               _reveal(2, const WorldTimeCard()),
+              if (!kIsWeb) ...[
+                const SizedBox(height: 14),
+                _reveal(3, const TranslateEntryTile()),
+              ],
             ],
           ),
         ),
