@@ -682,14 +682,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const _TileDivider(),
           _SettingTile(
-            icon: Icons.photo_camera_outlined,
-            title: 'Foto profil',
-            subtitle:
-                _photo == null ? 'Belum ada foto' : 'Ketuk untuk mengganti',
-            onTap: _busy ? null : _choosePhotoSource,
-          ),
-          const _TileDivider(),
-          _SettingTile(
             icon: Icons.notifications_none_rounded,
             title: 'Notifikasi',
             subtitle: 'Pengingat misi harian dan pencapaian',
