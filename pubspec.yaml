@@ -37,15 +37,13 @@ dev_dependencies:
   flutter_native_splash: ^2.4.0
   flutter_launcher_icons: ^0.14.1
 
-# Splash bawaan OS (sebelum splash animasi Flutter). Jalankan:
-#   dart run flutter_native_splash:create
+
 flutter_native_splash:
   color: "#F4F8FA"
   android_12:
     color: "#F4F8FA"
 
-# Ikon aplikasi (logo W). Jalankan:
-#   dart run flutter_launcher_icons
+
 flutter_launcher_icons:
   android: true
   ios: true
